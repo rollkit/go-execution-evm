@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/rollkit/go-execution"
-	proxyJsonrpc "github.com/rollkit/go-execution/proxy/jsonrpc"
+	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	rollkitTypes "github.com/rollkit/rollkit/types"
 )
 
@@ -34,15 +34,15 @@ var _ execution.Execute = (*ProxyClient)(nil)
 
 // ProxyClient implements the Execute interface in go-execution
 type ProxyClient struct {
-	client       *proxyJsonrpc.Client
+	client       *proxy_json_rpc.Client
 	engineClient *rpc.Client // engine api
 	ethClient    *ethclient.Client
 	genesisHash  common.Hash
 	feeRecipient common.Address
 }
 
-func NewClient(config *proxyJsonrpc.Config, ethURL, engineURL string, genesisHash common.Hash, feeRecipient common.Address) (*ProxyClient, error) {
-	client := proxyJsonrpc.NewClient()
+func NewClient(config *proxy_json_rpc.Config, ethURL, engineURL string, genesisHash common.Hash, feeRecipient common.Address) (*ProxyClient, error) {
+	client := proxy_json_rpc.NewClient()
 	client.SetConfig(config)
 
 	ethClient, err := ethclient.Dial(ethURL)

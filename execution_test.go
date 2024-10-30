@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rollkit/go-execution-evm/proxy"
 	"github.com/rollkit/go-execution/mocks"
-	proxyJsonrpc "github.com/rollkit/go-execution/proxy/jsonrpc"
+	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	rollkitTypes "github.com/rollkit/rollkit/types"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ type testEnv struct {
 	jwtSecret string
 	cleanup   func()
 	client    *EngineAPIExecutionClient
-	proxyConf *proxyJsonrpc.Config
+	proxyConf *proxy_json_rpc.Config
 	mockExec  *mocks.MockExecute
 }
 
@@ -38,7 +38,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 	}
 
 	// setup a proxy config
-	proxyConf := &proxyJsonrpc.Config{
+	proxyConf := &proxy_json_rpc.Config{
 		DefaultTimeout: 5 * time.Second,
 		MaxRequestSize: 1024 * 1024,
 	}
@@ -47,7 +47,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 	mockExec := mocks.NewMockExecute(t)
 
 	// create a proxy server with mock execute
-	server := proxyJsonrpc.NewServer(mockExec, proxyConf)
+	server := proxy_json_rpc.NewServer(mockExec, proxyConf)
 	testServer := httptest.NewServer(server)
 
 	// create a proxy client that implements the Execute interface
