@@ -10,10 +10,7 @@ services:
       /bin/sh -c "mkdir -p /jwt && 
       if [ ! -f /jwt/jwt.hex ]; then 
         apk add --no-cache openssl &&
-        openssl rand -hex 32 | tr -d '\n' > /jwt/jwt.hex &&
-        echo '✅ JWT token generated successfully'; 
-      else
-        echo '✅ JWT token already exists';
+        openssl rand -hex 32 | tr -d '\n' > /jwt/jwt.hex; 
       fi"
 
   reth:
