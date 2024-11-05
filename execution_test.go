@@ -10,7 +10,7 @@ import (
 	"github.com/rollkit/go-execution-evm/proxy"
 	"github.com/rollkit/go-execution/mocks"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
-	rollkitTypes "github.com/rollkit/rollkit/types"
+	rollkit_types "github.com/rollkit/rollkit/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,7 +88,7 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 	initialHeight := uint64(0)
 	chainID := "11155111" // sepolia chain id
 
-	expectedStateRoot := rollkitTypes.Hash{}
+	expectedStateRoot := rollkit_types.Hash{}
 	copy(expectedStateRoot[:], []byte{1, 2, 3})
 	expectedGasLimit := uint64(1000000)
 
@@ -107,7 +107,7 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 	env := setupTestEnv(t)
 	defer env.cleanup()
 
-	expectedTxs := []rollkitTypes.Tx{[]byte("tx1"), []byte("tx2")}
+	expectedTxs := []rollkit_types.Tx{[]byte("tx1"), []byte("tx2")}
 	env.mockExec.On("GetTxs").Return(expectedTxs, nil)
 
 	txs, err := env.client.GetTxs()
@@ -123,19 +123,19 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 
 	blockHeight := uint64(1)
 	timestamp := time.Now().UTC().Truncate(time.Second)
-	prevStateRoot := rollkitTypes.Hash{}
+	prevStateRoot := rollkit_types.Hash{}
 	copy(prevStateRoot[:], []byte{1, 2, 3})
-	testTx := rollkitTypes.Tx("test transaction")
+	testTx := rollkit_types.Tx("test transaction")
 
-	expectedStateRoot := rollkitTypes.Hash{}
+	expectedStateRoot := rollkit_types.Hash{}
 	copy(expectedStateRoot[:], []byte{4, 5, 6})
 	expectedGasUsed := uint64(21000)
 
-	env.mockExec.On("ExecuteTxs", []rollkitTypes.Tx{testTx}, blockHeight, timestamp, prevStateRoot).
+	env.mockExec.On("ExecuteTxs", []rollkit_types.Tx{testTx}, blockHeight, timestamp, prevStateRoot).
 		Return(expectedStateRoot, expectedGasUsed, nil)
 
 	stateRoot, gasUsed, err := env.client.ExecuteTxs(
-		[]rollkitTypes.Tx{testTx},
+		[]rollkit_types.Tx{testTx},
 		blockHeight,
 		timestamp,
 		prevStateRoot,

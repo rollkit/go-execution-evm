@@ -1,1 +1,2 @@
-docker/jwttoken/ 
+docker/jwttoken/*
+!docker/jwttoken/.gitkeep

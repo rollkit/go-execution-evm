@@ -4,7 +4,7 @@ import (
 	"time"
 
 	execution "github.com/rollkit/go-execution"
-	rollkitTypes "github.com/rollkit/rollkit/types"
+	rollkit_types "github.com/rollkit/rollkit/types"
 )
 
 type EngineAPIExecutionClient struct {
@@ -25,22 +25,22 @@ func (c *EngineAPIExecutionClient) InitChain(
 	genesisTime time.Time,
 	initialHeight uint64,
 	chainID string,
-) (rollkitTypes.Hash, uint64, error) {
+) (rollkit_types.Hash, uint64, error) {
 	return c.execute.InitChain(genesisTime, initialHeight, chainID)
 }
 
 // GetTxs retrieves transactions from the transaction pool.
-func (c *EngineAPIExecutionClient) GetTxs() ([]rollkitTypes.Tx, error) {
+func (c *EngineAPIExecutionClient) GetTxs() ([]rollkit_types.Tx, error) {
 	return c.execute.GetTxs()
 }
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used.
 func (c *EngineAPIExecutionClient) ExecuteTxs(
-	txs []rollkitTypes.Tx,
+	txs []rollkit_types.Tx,
 	blockHeight uint64,
 	timestamp time.Time,
-	prevStateRoot rollkitTypes.Hash,
-) (rollkitTypes.Hash, uint64, error) {
+	prevStateRoot rollkit_types.Hash,
+) (rollkit_types.Hash, uint64, error) {
 	return c.execute.ExecuteTxs(txs, blockHeight, timestamp, prevStateRoot)
 }
 
