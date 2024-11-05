@@ -3,9 +3,14 @@ name: "reth"
 services:
   jwt-init:
     container_name: jwt-init
-    image: alpine
+    image: alpine:3.19
     volumes:
       - ./jwttoken:/jwt
+    healthcheck:
+      test: ["CMD", "test", "-f", "/jwt/jwt.hex"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
     command: >
       /bin/sh -c "mkdir -p /jwt && 
       if [ ! -f /jwt/jwt.hex ]; then 
