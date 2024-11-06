@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	execution "github.com/rollkit/go-execution"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
-	rollkit_types "github.com/rollkit/rollkit/types"
+	rollkit_types "github.com/rollkit/go-execution/types"
 )
 
 type PayloadStatus string

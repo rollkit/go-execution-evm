@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rollkit/go-execution/mocks"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
-	rollkit_types "github.com/rollkit/rollkit/types"
+	rollkit_types "github.com/rollkit/go-execution/types"
 	"github.com/stretchr/testify/require"
 )
 
