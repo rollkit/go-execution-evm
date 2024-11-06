@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rollkit/go-execution-evm/proxy"
 	"github.com/rollkit/go-execution/mocks"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	rollkit_types "github.com/rollkit/rollkit/types"
@@ -56,14 +55,10 @@ func setupTestEnv(t *testing.T) *testEnv {
 	genesisHash := common.HexToHash("0x0")
 	feeRecipient := common.HexToAddress("0x0")
 
-	proxyClient, err := proxy.NewClient(proxyConf, ethURL, engineURL, genesisHash, feeRecipient)
+	client, err := NewEngineAPIExecutionClient(proxyConf, ethURL, engineURL, genesisHash, feeRecipient)
 	require.NoError(t, err)
 
-	err = proxyClient.Start(testServer.URL)
-	require.NoError(t, err)
-
-	// create an execution client with the proxy client
-	client, err := NewEngineAPIExecutionClient(proxyClient)
+	err = client.Start(testServer.URL)
 	require.NoError(t, err)
 
 	return &testEnv{
@@ -72,7 +67,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 		cleanup: func() {
 			cleanup()
 			testServer.Close()
-			proxyClient.Stop()
+			client.Stop()
 		},
 		client:    client,
 		proxyConf: proxyConf,

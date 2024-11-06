@@ -11,12 +11,8 @@ graph LR
         EngineAPIExecutionClient
         subgraph Client Components
             EthClient[Eth Client]
-            ProxyClient[JSON-RPC Proxy Client]
+            JsonRpcClient[JSON-RPC Client]
         end
-    end
-
-    subgraph Proxy Layer
-        ProxyServer[JSON-RPC Proxy Server]
     end
 
     subgraph Execution Layer
@@ -29,45 +25,39 @@ graph LR
 
     %% Test Environment Connections
     TestClient -->|uses| EngineAPIExecutionClient
-    ProxyServer -->|delegates to| MockExecutor
+    JsonRpcClient -->|test mode| MockExecutor
 
     %% Execution Client Connections
     EngineAPIExecutionClient -->|eth calls| EthClient
-    EngineAPIExecutionClient -->|engine calls| ProxyClient
+    EngineAPIExecutionClient -->|engine calls| JsonRpcClient
     EthClient -->|eth/net/web3| JsonRPC
-    ProxyClient -->|forwards requests| ProxyServer
+    JsonRpcClient -->|engine api| EngineAPI
 
-    %% Proxy to Reth Connections
-    ProxyServer -->|authenticated requests| EngineAPI
+    %% Reth Internal Connections
     JsonRPC -->|internal| Reth
     EngineAPI -->|internal| Reth
 
     %% Styling
     classDef primary fill:#f9f,stroke:#333,stroke-width:2px
     classDef secondary fill:#bbf,stroke:#333,stroke-width:1px
-    class EngineAPIExecutionClient,ProxyServer primary
-    class EthClient,ProxyClient,MockExecutor,EngineAPI,JsonRPC secondary
+    class EngineAPIExecutionClient primary
+    class EthClient,JsonRpcClient,MockExecutor,EngineAPI,JsonRPC secondary
 ```
 
 The architecture consists of several key components:
 
 1. **Execution Client**
 
-   - `EngineAPIExecutionClient`: Main client interface
+   - `EngineAPIExecutionClient`: Main client interface that implements the Execute interface
    - `EthClient`: Handles standard Ethereum JSON-RPC calls
-   - `ProxyClient`: Handles Engine API calls through the proxy
+   - `JsonRpcClient`: Handles Engine API calls
 
-2. **Proxy Layer**
-
-   - `JSON-RPC Proxy Server`: Authenticates and forwards Engine API requests
-   - Handles JWT authentication with Reth
-
-3. **Execution Layer**
+2. **Execution Layer**
 
    - `Reth Node`: Ethereum execution client
    - Exposes Engine API and standard JSON-RPC endpoints
 
-4. **Test Environment**
+3. **Test Environment**
    - `Test Client`: Integration tests
    - `Mock Executor`: Simulates execution behavior for unit tests
 
