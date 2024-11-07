@@ -36,10 +36,11 @@ services:
       - holesky_data:/root/.local/share/reth/holesky
       - logs:/root/logs
       - ./jwttoken:/root/jwt:ro
+      - ./chain:/root/chain
     pid: host
     command: >
       node
-      --chain sepolia
+      --chain /root/chain/genesis.json
       --metrics 0.0.0.0:9001
       --log.file.directory /root/logs
       --authrpc.addr 0.0.0.0
@@ -47,6 +48,9 @@ services:
       --authrpc.jwtsecret /root/jwt/jwt.hex
       --http --http.addr 0.0.0.0 --http.port 8545
       --http.api "eth,net,web3"
+      --disable-discovery
+      --debug.tip 0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216
+      -vvvv
 
 volumes:
   mainnet_data:
