@@ -163,38 +163,15 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(txs []rollkit_types.Tx, height uin
 		ethTxs[i] = tx
 	}
 
-	prevRandao := c.derivePrevRandao(height)
-	var forkchoiceResult map[string]interface{}
-	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV1",
-		map[string]interface{}{
-			"headBlockHash":      common.BytesToHash(prevStateRoot[:]),
-			"safeBlockHash":      common.BytesToHash(prevStateRoot[:]),
-			"finalizedBlockHash": common.BytesToHash(prevStateRoot[:]),
-		},
-		map[string]interface{}{
-			"timestamp":             timestamp.Unix(),
-			"prevRandao":            prevRandao,
-			"suggestedFeeRecipient": c.feeRecipient,
-		},
-	)
-	if err != nil {
-		return rollkit_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV1 failed: %w", err)
-	}
-
-	payloadID, ok := forkchoiceResult["payloadId"].(string)
-	if !ok {
-		return rollkit_types.Hash{}, 0, ErrNilPayloadStatus
-	}
-
-	var payload map[string]interface{}
-	err = c.engineClient.CallContext(ctx, &payload, "engine_getPayloadV1", payloadID)
-	if err != nil {
-		return rollkit_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV1 failed: %w", err)
-	}
-
-	payload["transactions"] = ethTxs
+	// 1. First call engine_newPayloadV1 with the transactions
 	var newPayloadResult map[string]interface{}
-	err = c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV1", payload)
+	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV1", map[string]interface{}{
+		"parentHash":   common.BytesToHash(prevStateRoot[:]),
+		"timestamp":    timestamp.Unix(),
+		"prevRandao":   c.derivePrevRandao(height),
+		"feeRecipient": c.feeRecipient,
+		"transactions": ethTxs,
+	})
 	if err != nil {
 		return rollkit_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV1 failed: %w", err)
 	}
@@ -202,6 +179,36 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(txs []rollkit_types.Tx, height uin
 	status, ok := newPayloadResult["status"].(string)
 	if !ok || PayloadStatus(status) != PayloadStatusValid {
 		return rollkit_types.Hash{}, 0, ErrInvalidPayloadStatus
+	}
+
+	// 2. Then update fork choice
+	var forkchoiceResult map[string]interface{}
+	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV1",
+		map[string]interface{}{
+			"headBlockHash":      common.BytesToHash(prevStateRoot[:]),
+			"safeBlockHash":      common.BytesToHash(prevStateRoot[:]),
+			"finalizedBlockHash": common.BytesToHash(prevStateRoot[:]),
+		},
+		map[string]interface{}{
+			"timestamp":             timestamp.Unix(),
+			"prevRandao":            c.derivePrevRandao(height),
+			"suggestedFeeRecipient": c.feeRecipient,
+		},
+	)
+	if err != nil {
+		return rollkit_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV1 failed: %w", err)
+	}
+
+	// 3. Get the execution results
+	var payload map[string]interface{}
+	payloadID, ok := forkchoiceResult["payloadId"].(string)
+	if !ok {
+		return rollkit_types.Hash{}, 0, ErrNilPayloadStatus
+	}
+
+	err = c.engineClient.CallContext(ctx, &payload, "engine_getPayloadV1", payloadID)
+	if err != nil {
+		return rollkit_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV1 failed: %w", err)
 	}
 
 	newStateRoot := common.HexToHash(payload["stateRoot"].(string))
