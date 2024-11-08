@@ -45,7 +45,7 @@ type EngineAPIExecutionClient struct {
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
-func NewEngineAPIExecutionClient(proxyConfig *proxy_json_rpc.Config, ethURL, engineURL string, jwtSecret string,genesisHash common.Hash, feeRecipient common.Address) (*EngineAPIExecutionClient, error) {
+func NewEngineAPIExecutionClient(proxyConfig *proxy_json_rpc.Config, ethURL, engineURL string, jwtSecret string, genesisHash common.Hash, feeRecipient common.Address) (*EngineAPIExecutionClient, error) {
 	proxyClient := proxy_json_rpc.NewClient()
 	proxyClient.SetConfig(proxyConfig)
 
