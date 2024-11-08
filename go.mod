@@ -75,4 +75,7 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-require github.com/stretchr/testify v1.9.0
+require (
+	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/stretchr/testify v1.9.0
+)

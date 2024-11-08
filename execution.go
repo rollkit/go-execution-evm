@@ -2,15 +2,18 @@ package execution
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/golang-jwt/jwt"
 	execution "github.com/rollkit/go-execution"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
@@ -42,7 +45,7 @@ type EngineAPIExecutionClient struct {
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
-func NewEngineAPIExecutionClient(proxyConfig *proxy_json_rpc.Config, ethURL, engineURL string, genesisHash common.Hash, feeRecipient common.Address) (*EngineAPIExecutionClient, error) {
+func NewEngineAPIExecutionClient(proxyConfig *proxy_json_rpc.Config, ethURL, engineURL string, jwtSecret string,genesisHash common.Hash, feeRecipient common.Address) (*EngineAPIExecutionClient, error) {
 	proxyClient := proxy_json_rpc.NewClient()
 	proxyClient.SetConfig(proxyConfig)
 
@@ -51,7 +54,34 @@ func NewEngineAPIExecutionClient(proxyConfig *proxy_json_rpc.Config, ethURL, eng
 		return nil, err
 	}
 
-	engineClient, err := rpc.Dial(engineURL)
+	authToken := ""
+	if jwtSecret != "" {
+		// Decode hex secret to bytes
+		secret, err := hex.DecodeString(jwtSecret)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create a new token
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"exp": time.Now().Add(time.Hour * 1).Unix(), // Expires in 1 hour
+			"iat": time.Now().Unix(),
+		})
+
+		// Sign the token with the decoded secret
+		authToken, err = token.SignedString(secret)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	engineClient, err := rpc.DialOptions(context.Background(), engineURL,
+		rpc.WithHTTPAuth(func(h http.Header) error {
+			if authToken != "" {
+				h.Set("Authorization", "Bearer "+authToken)
+			}
+			return nil
+		}))
 	if err != nil {
 		return nil, err
 	}

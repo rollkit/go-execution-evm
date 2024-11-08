@@ -27,6 +27,7 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
+		"",
 		common.Hash{},
 		common.Address{},
 	)
@@ -65,6 +66,7 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
+		"",
 		common.Hash{},
 		common.Address{},
 	)
@@ -113,6 +115,7 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
+		"",
 		common.Hash{},
 		common.Address{},
 	)
@@ -179,6 +182,7 @@ func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
+		"",
 		common.Hash{},
 		common.Address{},
 	)
