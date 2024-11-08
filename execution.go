@@ -30,7 +30,7 @@ var (
 )
 
 // Ensure EngineAPIExecutionClient implements the execution.Execute interface
-var _ execution.Execute = (*EngineAPIExecutionClient)(nil)
+var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
 
 // EngineAPIExecutionClient implements the execution.Execute interface
 type EngineAPIExecutionClient struct {
