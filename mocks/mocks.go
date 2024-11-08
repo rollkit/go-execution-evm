@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,14 @@ import (
 type MockEngineAPI struct {
 	*httptest.Server
 }
+
+type ForkchoiceState struct {
+	HeadBlockHash      string
+	SafeBlockHash      string
+	FinalizedBlockHash string
+}
+
+var lastForkchoiceUpdate *ForkchoiceState
 
 func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 	t.Helper()
@@ -37,6 +46,15 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 				"latestValidHash": "0x1234",
 			}
 		case "engine_forkchoiceUpdatedV1":
+			params := req["params"].([]interface{})
+			forkchoiceState := params[0].(map[string]interface{})
+
+			lastForkchoiceUpdate = &ForkchoiceState{
+				HeadBlockHash:      forkchoiceState["headBlockHash"].(string),
+				SafeBlockHash:      forkchoiceState["safeBlockHash"].(string),
+				FinalizedBlockHash: forkchoiceState["finalizedBlockHash"].(string),
+			}
+
 			resp = map[string]interface{}{
 				"payloadStatus": map[string]interface{}{
 					"status": "VALID",
@@ -107,10 +125,6 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 		case "eth_getBlockByNumber", "eth_blockByNumber":
 			params := req["params"].([]interface{})
 			blockNumRaw := params[0]
-			fullTx := false
-			if len(params) > 1 {
-				fullTx = params[1].(bool)
-			}
 
 			var blockNum string
 			switch v := blockNumRaw.(type) {
@@ -121,17 +135,21 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 			}
 
 			if blockNum == "0x1" {
+				emptyTrieRoot := "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 				emptyBlockHash := "0x0000000000000000000000000000000000000000000000000000000000000000"
+				emptyBloom := "0x" + strings.Repeat("0", 512)
+				blockHash := "0x4bbb1357b89ddc1b1371f9ae83b72739a1815628f8648665fc332c3f0fb8d853"
+
 				blockResp := map[string]interface{}{
-					"hash":             "0x1234567890123456789012345678901234567890123456789012345678901234",
+					"hash":             blockHash,
 					"number":           "0x1",
 					"parentHash":       emptyBlockHash,
 					"timestamp":        "0x0",
 					"stateRoot":        "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-					"receiptsRoot":     emptyBlockHash,
-					"transactionsRoot": emptyBlockHash,
+					"receiptsRoot":     emptyTrieRoot,
+					"transactionsRoot": emptyTrieRoot,
 					"sha3Uncles":       "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
-					"logsBloom":        "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+					"logsBloom":        emptyBloom,
 					"difficulty":       "0x0",
 					"totalDifficulty":  "0x0",
 					"size":             "0x0",
@@ -143,12 +161,7 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 					"nonce":            "0x0000000000000000",
 					"baseFeePerGas":    "0x0",
 					"uncles":           []interface{}{},
-				}
-
-				if fullTx {
-					blockResp["transactions"] = []interface{}{}
-				} else {
-					blockResp["transactions"] = []interface{}{}
+					"transactions":     []interface{}{},
 				}
 
 				resp = blockResp
@@ -163,4 +176,8 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 	}))
 
 	return mock
+}
+
+func (m *MockEngineAPI) GetLastForkchoiceUpdated() *ForkchoiceState {
+	return lastForkchoiceUpdate
 }

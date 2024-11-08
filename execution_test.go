@@ -152,5 +152,28 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 }
 
 func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
-	// TO-DO
+	mockEngine := mocks.NewMockEngineAPI(t)
+	defer mockEngine.Close()
+
+	mockEth := mocks.NewMockEthAPI(t)
+	defer mockEth.Close()
+
+	client, err := NewEngineAPIExecutionClient(
+		&proxy_json_rpc.Config{},
+		mockEth.URL,
+		mockEngine.URL,
+		common.Hash{},
+		common.Address{},
+	)
+	require.NoError(t, err)
+
+	blockHeight := uint64(1)
+	err = client.SetFinal(blockHeight)
+	require.NoError(t, err)
+
+	lastCall := mockEngine.GetLastForkchoiceUpdated()
+	require.NotNil(t, lastCall)
+
+	expectedBlockHash := "0x4bbb1357b89ddc1b1371f9ae83b72739a1815628f8648665fc332c3f0fb8d853"
+	require.Equal(t, expectedBlockHash, lastCall.FinalizedBlockHash)
 }
