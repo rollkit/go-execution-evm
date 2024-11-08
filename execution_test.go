@@ -11,7 +11,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
-	rollkit_types "github.com/rollkit/go-execution/types"
+	go_execution_types "github.com/rollkit/go-execution/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -197,7 +197,7 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 	require.NoError(t, err)
 
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	var expectedStateRoot rollkit_types.Hash
+	var expectedStateRoot go_execution_types.Hash
 	copy(expectedStateRoot[:], mockStateRoot.Bytes())
 
 	require.Equal(t, expectedStateRoot, stateRoot)
@@ -288,13 +288,13 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	blockHeight := uint64(1)
 	timestamp := time.Now().UTC().Truncate(time.Second)
 
-	var prevStateRoot rollkit_types.Hash
+	var prevStateRoot go_execution_types.Hash
 	copy(prevStateRoot[:], []byte{1, 2, 3})
 
-	testTx := rollkit_types.Tx("test transaction")
+	testTx := go_execution_types.Tx("test transaction")
 
 	stateRoot, gasUsed, err := client.ExecuteTxs(
-		[]rollkit_types.Tx{testTx},
+		[]go_execution_types.Tx{testTx},
 		blockHeight,
 		timestamp,
 		prevStateRoot,
@@ -302,7 +302,7 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	require.NoError(t, err)
 
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	var expectedStateRoot rollkit_types.Hash
+	var expectedStateRoot go_execution_types.Hash
 	copy(expectedStateRoot[:], mockStateRoot.Bytes())
 
 	require.Equal(t, expectedStateRoot, stateRoot)
