@@ -36,12 +36,12 @@ services:
       - holesky_data:/root/.local/share/reth/holesky
       - logs:/root/logs
       - ./jwttoken:/root/jwt:ro
-      - ./chain:/root/chain
+      - ./chain:/root/chain:ro
     pid: host
     entrypoint: /bin/sh -c 
     command: 
       - |
-          reth init /root/chain/genesis.json
+          reth init --chain /root/chain/genesis.json
           reth node \
           --chain /root/chain/genesis.json \
           --metrics 0.0.0.0:9001 \
