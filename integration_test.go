@@ -25,18 +25,18 @@ const (
 	GENESIS_HASH = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
 	JWT_SECRET   = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65"
 
-	DOCKER_CHAIN_PATH      = "./docker/chain" // path relative to the test file
+	DOCKER_CHAIN_PATH      = "./docker/chain"     // path relative to the test file
 	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" // path relative to the test file
 	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
 )
 
-func setupTestRethEngine(t *testing.T) func() {
+func setupTestRethEngine(t *testing.T) {
 	t.Helper()
 
-	chainPath, err := filepath.Abs(DOCKER_CHAIN_PATH) 
+	chainPath, err := filepath.Abs(DOCKER_CHAIN_PATH)
 	require.NoError(t, err)
 
-	jwtSecretPath, err := filepath.Abs(DOCKER_JWTSECRET_PATH) 
+	jwtSecretPath, err := filepath.Abs(DOCKER_JWTSECRET_PATH)
 	require.NoError(t, err)
 
 	err = os.WriteFile(DOCKER_JWTSECRET_PATH+DOCKER_JWT_SECRET_FILE, []byte(JWT_SECRET), 0644)
@@ -99,21 +99,20 @@ func setupTestRethEngine(t *testing.T) func() {
 
 	// a reasonable time to wait for the container to start!
 	// do we want a more predictable elaborate code to wait for the container to be running?
-	time.Sleep(50 * time.Millisecond) 
+	time.Sleep(50 * time.Millisecond)
 
-	return func() {
+	t.Cleanup(func() {
 		err = cli.ContainerStop(context.Background(), rethContainer.ID, container.StopOptions{})
 		require.NoError(t, err)
 		err = cli.ContainerRemove(context.Background(), rethContainer.ID, container.RemoveOptions{})
 		require.NoError(t, err)
-		err = os.Remove(DOCKER_JWTSECRET_PATH+DOCKER_JWT_SECRET_FILE)
-
+		err = os.Remove(DOCKER_JWTSECRET_PATH + DOCKER_JWT_SECRET_FILE)
 		require.NoError(t, err)
-	}
+	})
 }
 
 func TestEngineAPIExecutionClient_engineLifecycle(t *testing.T) {
-	defer setupTestRethEngine(t)()
+	setupTestRethEngine(t)
 
 	genesisHash := common.HexToHash(GENESIS_HASH)
 	client, err := NewEngineAPIExecutionClient(
