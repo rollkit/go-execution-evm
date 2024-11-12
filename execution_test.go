@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -35,7 +36,8 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 	initialHeight := uint64(0)
 	chainID := "11155111" // sepolia chain id
 
-	stateRoot, gasLimit, err := client.InitChain(genesisTime, initialHeight, chainID)
+	ctx := context.Background()
+	stateRoot, gasLimit, err := client.InitChain(ctx, genesisTime, initialHeight, chainID)
 	require.NoError(t, err)
 
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
@@ -60,8 +62,8 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 		common.Hash{},
 		common.Address{},
 	)
-
 	require.NoError(t, err)
+
 	mockEth.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resp interface{}
 
@@ -105,7 +107,8 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 		})
 	}))
 
-	txs, err := client.GetTxs()
+	ctx := context.Background()
+	txs, err := client.GetTxs(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, txs)
 	require.Greater(t, len(txs), 0)
@@ -135,7 +138,9 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 
 	testTx := execution_types.Tx("test transaction")
 
+	ctx := context.Background()
 	stateRoot, gasUsed, err := client.ExecuteTxs(
+		ctx,
 		[]execution_types.Tx{testTx},
 		blockHeight,
 		timestamp,
@@ -168,7 +173,8 @@ func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
 	require.NoError(t, err)
 
 	blockHeight := uint64(1)
-	err = client.SetFinal(blockHeight)
+	ctx := context.Background()
+	err = client.SetFinal(ctx, blockHeight)
 	require.NoError(t, err)
 
 	lastCall := mockEngine.GetLastForkchoiceUpdated()

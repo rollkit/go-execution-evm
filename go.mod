@@ -2,7 +2,7 @@ module github.com/rollkit/go-execution-evm
 
 go 1.22.8
 
-replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241107213138-d1712b8c4d58
+replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241108025553-291f75953069
 
 require (
 	github.com/ethereum/go-ethereum v1.14.11
@@ -59,7 +59,6 @@ require (
 	github.com/rs/cors v1.11.0 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/supranational/blst v0.3.13 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect

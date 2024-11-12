@@ -84,9 +84,7 @@ func (c *EngineAPIExecutionClient) Stop() {
 }
 
 // InitChain initializes the blockchain with genesis information
-func (c *EngineAPIExecutionClient) InitChain(genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
-	ctx := context.Background()
-
+func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
 	var forkchoiceResult map[string]interface{}
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV1",
 		map[string]interface{}{
@@ -123,9 +121,7 @@ func (c *EngineAPIExecutionClient) InitChain(genesisTime time.Time, initialHeigh
 }
 
 // GetTxs retrieves transactions from the transaction pool
-func (c *EngineAPIExecutionClient) GetTxs() ([]execution_types.Tx, error) {
-	ctx := context.Background()
-
+func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_types.Tx, error) {
 	var result struct {
 		Pending map[string]map[string]*types.Transaction `json:"pending"`
 		Queued  map[string]map[string]*types.Transaction `json:"queued"`
@@ -162,9 +158,7 @@ func (c *EngineAPIExecutionClient) GetTxs() ([]execution_types.Tx, error) {
 }
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
-func (c *EngineAPIExecutionClient) ExecuteTxs(txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
-	ctx := context.Background()
-
+func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
 	ethTxs := make([][]byte, len(txs))
 	for i, tx := range txs {
 		ethTxs[i] = tx
@@ -226,9 +220,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(txs []execution_types.Tx, height u
 }
 
 // SetFinal marks a block at the given height as final
-func (c *EngineAPIExecutionClient) SetFinal(height uint64) error {
-	ctx := context.Background()
-
+func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) error {
 	block, err := c.ethClient.BlockByNumber(ctx, big.NewInt(int64(height)))
 	if err != nil {
 		return fmt.Errorf("failed to get block at height %d: %w", height, err)
