@@ -40,12 +40,13 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 
 		method := req["method"].(string)
 		switch method {
-		case "engine_newPayloadV1":
+		case "engine_newPayloadV3":
 			resp = map[string]interface{}{
 				"status":          "VALID",
 				"latestValidHash": "0x1234",
+				"validationError": nil,
 			}
-		case "engine_forkchoiceUpdatedV1":
+		case "engine_forkchoiceUpdatedV3":
 			params := req["params"].([]interface{})
 			forkchoiceState := params[0].(map[string]interface{})
 
@@ -57,15 +58,37 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 
 			resp = map[string]interface{}{
 				"payloadStatus": map[string]interface{}{
-					"status": "VALID",
+					"status":          "VALID",
+					"latestValidHash": nil,
+					"validationError": nil,
 				},
 				"payloadId": "0x1234",
 			}
-		case "engine_getPayloadV1":
+		case "engine_getPayloadV3":
 			resp = map[string]interface{}{
-				"stateRoot": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				"gasUsed":   float64(21000),
-				"gasLimit":  float64(1000000),
+				"executionPayload": map[string]interface{}{
+					"parentHash":    "0x0000000000000000000000000000000000000000000000000000000000000000",
+					"feeRecipient":  "0x0000000000000000000000000000000000000000",
+					"stateRoot":     "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					"receiptsRoot":  "0x0000000000000000000000000000000000000000000000000000000000000000",
+					"logsBloom":     "0x00000000000000000000000000000000",
+					"prevRandao":    "0x0000000000000000000000000000000000000000000000000000000000000000",
+					"blockNumber":   "0x0",
+					"gasLimit":      "0xf4240",
+					"gasUsed":       "0x5208",
+					"timestamp":     "0x0",
+					"extraData":     "0x",
+					"baseFeePerGas": "0x0",
+					"blockHash":     "0x0000000000000000000000000000000000000000000000000000000000000000",
+					"transactions":  []string{},
+				},
+				"blockValue": "0x0",
+				"blobsBundle": map[string]interface{}{
+					"commitments": []string{},
+					"proofs":      []string{},
+					"blobs":       []string{},
+				},
+				"shouldOverrideBuilder": false,
 			}
 		}
 

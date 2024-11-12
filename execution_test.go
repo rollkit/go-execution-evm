@@ -46,6 +46,60 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 
 	require.Equal(t, expectedStateRoot, stateRoot)
 	require.Equal(t, uint64(1000000), gasLimit)
+
+	lastCall := mockEngine.GetLastForkchoiceUpdated()
+	require.NotNil(t, lastCall)
+	require.Equal(t, common.Hash{}.Hex(), lastCall.HeadBlockHash)
+	require.Equal(t, common.Hash{}.Hex(), lastCall.SafeBlockHash)
+	require.Equal(t, common.Hash{}.Hex(), lastCall.FinalizedBlockHash)
+}
+
+func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
+	mockEngine := mocks.NewMockEngineAPI(t)
+	defer mockEngine.Close()
+
+	mockEth := mocks.NewMockEthAPI(t)
+	defer mockEth.Close()
+
+	client, err := NewEngineAPIExecutionClient(
+		&proxy_json_rpc.Config{},
+		mockEth.URL,
+		mockEngine.URL,
+		common.Hash{},
+		common.Address{},
+	)
+	require.NoError(t, err)
+
+	blockHeight := uint64(1)
+	timestamp := time.Now().UTC().Truncate(time.Second)
+
+	var prevStateRoot execution_types.Hash
+	copy(prevStateRoot[:], []byte{1, 2, 3})
+
+	testTx := execution_types.Tx("test transaction")
+
+	ctx := context.Background()
+	stateRoot, gasUsed, err := client.ExecuteTxs(
+		ctx,
+		[]execution_types.Tx{testTx},
+		blockHeight,
+		timestamp,
+		prevStateRoot,
+	)
+	require.NoError(t, err)
+
+	lastCall := mockEngine.GetLastForkchoiceUpdated()
+	require.NotNil(t, lastCall)
+	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.HeadBlockHash)
+	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.SafeBlockHash)
+	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.FinalizedBlockHash)
+
+	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	var expectedStateRoot execution_types.Hash
+	copy(expectedStateRoot[:], mockStateRoot.Bytes())
+
+	require.Equal(t, expectedStateRoot, stateRoot)
+	require.Equal(t, uint64(21000), gasUsed)
 }
 
 func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
@@ -114,48 +168,6 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 	require.Greater(t, len(txs), 0)
 }
 
-func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
-	mockEngine := mocks.NewMockEngineAPI(t)
-	defer mockEngine.Close()
-
-	mockEth := mocks.NewMockEthAPI(t)
-	defer mockEth.Close()
-
-	client, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
-		mockEth.URL,
-		mockEngine.URL,
-		common.Hash{},
-		common.Address{},
-	)
-	require.NoError(t, err)
-
-	blockHeight := uint64(1)
-	timestamp := time.Now().UTC().Truncate(time.Second)
-
-	var prevStateRoot execution_types.Hash
-	copy(prevStateRoot[:], []byte{1, 2, 3})
-
-	testTx := execution_types.Tx("test transaction")
-
-	ctx := context.Background()
-	stateRoot, gasUsed, err := client.ExecuteTxs(
-		ctx,
-		[]execution_types.Tx{testTx},
-		blockHeight,
-		timestamp,
-		prevStateRoot,
-	)
-	require.NoError(t, err)
-
-	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	var expectedStateRoot execution_types.Hash
-	copy(expectedStateRoot[:], mockStateRoot.Bytes())
-
-	require.Equal(t, expectedStateRoot, stateRoot)
-	require.Equal(t, uint64(21000), gasUsed)
-}
-
 func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
 	mockEngine := mocks.NewMockEngineAPI(t)
 	defer mockEngine.Close()
@@ -182,4 +194,6 @@ func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
 
 	expectedBlockHash := "0x4bbb1357b89ddc1b1371f9ae83b72739a1815628f8648665fc332c3f0fb8d853"
 	require.Equal(t, expectedBlockHash, lastCall.FinalizedBlockHash)
+	require.Equal(t, expectedBlockHash, lastCall.HeadBlockHash)
+	require.Equal(t, expectedBlockHash, lastCall.SafeBlockHash)
 }
