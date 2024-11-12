@@ -50,7 +50,7 @@ services:
           --authrpc.port 8551 \
           --authrpc.jwtsecret /root/jwt/jwt.hex \
           --http --http.addr 0.0.0.0 --http.port 8545 \
-          --http.api "eth,net,web3" \
+          --http.api "eth,net,web3,txpool" \
           --disable-discovery \
           --debug.tip 0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216 \
           -vvvv

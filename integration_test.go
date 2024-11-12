@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,10 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
@@ -28,6 +33,9 @@ const (
 	DOCKER_CHAIN_PATH      = "./docker/chain"     // path relative to the test file
 	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" // path relative to the test file
 	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
+
+	TEST_PRIVATE_KEY = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
+	TEST_TO_ADDRESS = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 )
 
 func setupTestRethEngine(t *testing.T) {
@@ -60,7 +68,7 @@ func setupTestRethEngine(t *testing.T) {
           		--authrpc.port 8551 \
           		--authrpc.jwtsecret /root/jwt/testsecret.hex \
           		--http --http.addr 0.0.0.0 --http.port 8545 \
-          		--http.api "eth,net,web3" \
+          		--http.api "eth,net,web3,txpool" \
           		--disable-discovery \
           		--debug.tip 0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216 \
           		-vvvv
@@ -111,11 +119,15 @@ func setupTestRethEngine(t *testing.T) {
 	})
 }
 
-func TestEngineAPIExecutionClient_engineLifecycle(t *testing.T) {
-	setupTestRethEngine(t)
+func TestExecutionClientLifecycle(t *testing.T) {
+	// setupTestRethEngine(t)
 
 	genesisHash := common.HexToHash(GENESIS_HASH)
-	client, err := NewEngineAPIExecutionClient(
+
+	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
+	require.NoError(t, err)
+
+	executionClient, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
@@ -125,16 +137,42 @@ func TestEngineAPIExecutionClient_engineLifecycle(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	genesisTime := time.Now().UTC().Truncate(time.Second)
-	initialHeight := uint64(0)
+	t.Run("InitChain", func(t *testing.T) {
+		genesisTime := time.Now().UTC().Truncate(time.Second)
+		initialHeight := uint64(0)
 
-	stateRoot, gasLimit, err := client.InitChain(genesisTime, initialHeight, CHAIN_ID)
-	require.NoError(t, err)
+		stateRoot, gasLimit, err := executionClient.InitChain(genesisTime, initialHeight, CHAIN_ID)
+		require.NoError(t, err)
 
-	staterootHash := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
-	var expectedStateRoot rollkit_types.Hash
-	copy(expectedStateRoot[:], staterootHash.Bytes())
+		staterootHash := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
+		var expectedStateRoot rollkit_types.Hash
+		copy(expectedStateRoot[:], staterootHash.Bytes())
 
-	require.Equal(t, expectedStateRoot, stateRoot)
-	require.Equal(t, uint64(1000000), gasLimit)
+		require.Equal(t, expectedStateRoot, stateRoot)
+		require.Equal(t, uint64(1000000), gasLimit)
+	})
+
+	t.Run("GetTxs", func(t *testing.T) {
+		privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
+		require.NoError(t, err)
+
+		chainId, _ := new(big.Int).SetString(CHAIN_ID, 10)
+		nonce := uint64(0)
+		txnValue := big.NewInt(1000000000000000000)
+		gasLimit := uint64(21000)
+		gasPrice := big.NewInt(30000000000)
+		toAddress := common.HexToAddress(TEST_TO_ADDRESS)
+
+		tx := types.NewTransaction(nonce, toAddress, txnValue, gasLimit, gasPrice, nil)
+
+		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+		require.NoError(t, err)
+
+		err = rpcClient.SendTransaction(context.Background(), signedTx)
+		require.NoError(t, err)
+
+		txs, err := executionClient.GetTxs()
+		require.NoError(t, err)
+		assert.NotEmpty(t, txs)
+	})
 }
