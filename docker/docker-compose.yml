@@ -21,7 +21,7 @@ services:
   reth:
     container_name: reth
     restart: unless-stopped
-    image: ghcr.io/paradigmxyz/reth
+    image: ghcr.io/paradigmxyz/reth:v1.1.1
     depends_on:
       jwt-init:
         condition: service_completed_successfully
@@ -53,7 +53,7 @@ services:
           --http.api "eth,net,web3,txpool" \
           --disable-discovery \
           --debug.tip 0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216 \
-          -vvvv
+          -vvvvv
 
 volumes:
   mainnet_data:

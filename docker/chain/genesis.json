@@ -10,7 +10,8 @@
     "petersburgBlock": 0,
     "istanbulBlock": 0,
     "berlinBlock": 0,
-    "londonBlock": 0
+    "londonBlock": 0,
+    "cancunTime": 1710338100 
   },
   "alloc": {
     "0xd143C405751162d0F96bEE2eB5eb9C61882a736E": {

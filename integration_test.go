@@ -120,9 +120,14 @@ func setupTestRethEngine(t *testing.T) {
 }
 
 func TestExecutionClientLifecycle(t *testing.T) {
-	setupTestRethEngine(t)
+	// setupTestRethEngine(t)
 
+	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
+	genesisTime := time.Now().UTC().Truncate(time.Second)
+	genesisStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
+	var rollkitGenesisStateRoot rollkit_types.Hash
+	copy(rollkitGenesisStateRoot[:], genesisStateroot.Bytes())
 
 	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
 	require.NoError(t, err)
@@ -137,41 +142,35 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// sub tests are only functional grouping.
 	t.Run("InitChain", func(t *testing.T) {
-		genesisTime := time.Now().UTC().Truncate(time.Second)
-		initialHeight := uint64(0)
-
-		stateRoot, gasLimit, err := executionClient.InitChain(genesisTime, initialHeight, CHAIN_ID)
+		stateRoot, gasLimit, err := executionClient.InitChain(context.Background(), genesisTime, initialHeight, CHAIN_ID)
 		require.NoError(t, err)
 
-		staterootHash := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
-		var expectedStateRoot rollkit_types.Hash
-		copy(expectedStateRoot[:], staterootHash.Bytes())
-
-		require.Equal(t, expectedStateRoot, stateRoot)
+		require.Equal(t, rollkitGenesisStateRoot, stateRoot)
 		require.Equal(t, uint64(1000000), gasLimit)
 	})
 
+	privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
+	require.NoError(t, err)
+
+	chainId, _ := new(big.Int).SetString(CHAIN_ID, 10)
+	nonce := uint64(1)
+	txValue := big.NewInt(1000000000000000000)
+	gasLimit := uint64(21000)
+	gasPrice := big.NewInt(30000000000)
+	toAddress := common.HexToAddress(TEST_TO_ADDRESS)
+
+	tx := types.NewTransaction(nonce, toAddress, txValue, gasLimit, gasPrice, nil)
+
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+	require.NoError(t, err)
+
+	err = rpcClient.SendTransaction(context.Background(), signedTx)
+	require.NoError(t, err)
+
 	t.Run("GetTxs", func(t *testing.T) {
-		privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
-		require.NoError(t, err)
-
-		chainId, _ := new(big.Int).SetString(CHAIN_ID, 10)
-		nonce := uint64(1)
-		txnValue := big.NewInt(1000000000000000000)
-		gasLimit := uint64(21000)
-		gasPrice := big.NewInt(30000000000)
-		toAddress := common.HexToAddress(TEST_TO_ADDRESS)
-
-		tx := types.NewTransaction(nonce, toAddress, txnValue, gasLimit, gasPrice, nil)
-
-		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
-		require.NoError(t, err)
-
-		err = rpcClient.SendTransaction(context.Background(), signedTx)
-		require.NoError(t, err)
-
-		txs, err := executionClient.GetTxs()
+		txs, err := executionClient.GetTxs(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, 1, len(txs))
 
@@ -185,4 +184,41 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		assert.Equal(t, tx.GasPrice(), txResp.GasPrice())
 		assert.Equal(t, signedTx.ChainId(), txResp.ChainId())
 	})
+
+	txBytes, err := tx.MarshalBinary()
+	require.NoError(t, err)
+
+	t.Run("ExecuteTxs", func(t *testing.T) {
+		newStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
+		var rollkitNewStateRoot rollkit_types.Hash
+		copy(rollkitNewStateRoot[:], newStateroot.Bytes())
+
+		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, initialHeight, genesisTime, rollkitGenesisStateRoot)
+		require.NoError(t, err)
+		assert.Greater(t, gasLimit, gasUsed)
+		assert.Equal(t, newStateroot, stateroot)
+	})
+}
+
+func TestExecutionClient_InvalidPayloadTimestamp(t *testing.T) {
+	setupTestRethEngine(t)
+
+	initialHeight := uint64(0)
+	genesisHash := common.HexToHash(GENESIS_HASH)
+	genesisTime :=  time.Date(2024,3, 13, 13, 54, 0, 0, time.UTC)// pre-cancun timestamp not supported
+
+	executionClient, err := NewEngineAPIExecutionClient(
+		&proxy_json_rpc.Config{},
+		TEST_ETH_URL,
+		TEST_ENGINE_URL,
+		JWT_SECRET,
+		genesisHash,
+		common.Address{},
+	)
+	require.NoError(t, err)
+
+	_, _, err = executionClient.InitChain(context.Background(), genesisTime, initialHeight, CHAIN_ID)
+	// payload timestamp is not within the cancun timestamp
+	require.Error(t, err)
+	require.ErrorContains(t, err, "Unsupported fork")
 }

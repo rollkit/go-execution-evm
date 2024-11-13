@@ -116,6 +116,7 @@ func (c *EngineAPIExecutionClient) Stop() {
 // InitChain initializes the blockchain with genesis information
 func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
 	var forkchoiceResult map[string]interface{}
+	
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		map[string]interface{}{
 			"headBlockHash":      c.genesisHash,
@@ -123,7 +124,7 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			"finalizedBlockHash": c.genesisHash,
 		},
 		map[string]interface{}{
-			"timestamp":             genesisTime.Unix(),
+			"timestamp":             fmt.Sprintf("0x%X", genesisTime.Unix()),
 			"prevRandao":            common.Hash{},
 			"suggestedFeeRecipient": c.feeRecipient,
 			"parentBeaconBlockRoot": common.Hash{},
