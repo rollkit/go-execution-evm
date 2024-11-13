@@ -35,7 +35,7 @@ const (
 	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
 
 	TEST_PRIVATE_KEY = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
-	TEST_TO_ADDRESS = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
+	TEST_TO_ADDRESS  = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 )
 
 func setupTestRethEngine(t *testing.T) {
@@ -120,7 +120,7 @@ func setupTestRethEngine(t *testing.T) {
 }
 
 func TestExecutionClientLifecycle(t *testing.T) {
-	// setupTestRethEngine(t)
+	setupTestRethEngine(t)
 
 	genesisHash := common.HexToHash(GENESIS_HASH)
 
@@ -157,7 +157,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		chainId, _ := new(big.Int).SetString(CHAIN_ID, 10)
-		nonce := uint64(0)
+		nonce := uint64(1)
 		txnValue := big.NewInt(1000000000000000000)
 		gasLimit := uint64(21000)
 		gasPrice := big.NewInt(30000000000)
@@ -173,6 +173,16 @@ func TestExecutionClientLifecycle(t *testing.T) {
 
 		txs, err := executionClient.GetTxs()
 		require.NoError(t, err)
-		assert.NotEmpty(t, txs)
+		assert.Equal(t, 1, len(txs))
+
+		txResp := types.Transaction{}
+		err = txResp.UnmarshalBinary(txs[0])
+		require.NoError(t, err)
+
+		assert.Equal(t, tx.Nonce(), txResp.Nonce())
+		assert.Equal(t, tx.Value(), txResp.Value())
+		assert.Equal(t, tx.To(), txResp.To())
+		assert.Equal(t, tx.GasPrice(), txResp.GasPrice())
+		assert.Equal(t, signedTx.ChainId(), txResp.ChainId())
 	})
 }
