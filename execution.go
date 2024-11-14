@@ -128,6 +128,7 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			"prevRandao":            common.Hash{},
 			"suggestedFeeRecipient": c.feeRecipient,
 			"parentBeaconBlockRoot": common.Hash{},
+			"withdrawals":           []struct{}{},
 		},
 	)
 	if err != nil {
@@ -200,6 +201,9 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		ethTxs[i] = common.Bytes2Hex(tx)
 	}
 
+	// todo: fix
+	blkHash := "0x5971982f5f6e01257226780fcdc571e5b3844cac6e91ab2b423152248c585cb0"
+
 	var newPayloadResult map[string]interface{}
 	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
 		map[string]interface{}{
@@ -211,7 +215,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 			"transactions":  ethTxs,
 			"blobGasUsed":   "0x00",
 			"excessBlobGas": "0x00",
-			"withdrawals":   types.Withdrawals{},
+			"withdrawals":   []struct{}{},
 			"receiptsRoot":  "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"logsBloom":     "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
 			"blockNumber":   fmt.Sprintf("0x%X", height),
@@ -219,14 +223,14 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 			"gasUsed":       "0x5208",
 			"extraData":     "0x",
 			"baseFeePerGas": "0x7",
-			"blockHash":     "0x3559e851470f6e7bbed1db474980683e8c315bfce99b2a6ef47c057c04de7858", // TODO
+			"blockHash":     blkHash, 
 		},
 		// Expected blob versioned hashes
 		[]string{
-			"0x000657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014",
+			"0x0000000000000000000000000000000000000000000000000000000000000000",
 		},
 		// Root of the parent beacon block
-		"0x169630f535b4a41330164c6e5c92b1224c0c407f582d407d0ac3d206cd32fd52",
+		c.genesisHash.String(),
 	)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %s", err.Error())

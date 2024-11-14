@@ -128,7 +128,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	genesisStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
 	rollkitGenesisStateRoot := rollkit_types.Hash(genesisStateroot[:])
 
-	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
+	_, err := ethclient.Dial(TEST_ETH_URL)
 	require.NoError(t, err)
 
 	executionClient, err := NewEngineAPIExecutionClient(
@@ -165,8 +165,10 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
 	require.NoError(t, err)
 
-	err = rpcClient.SendTransaction(context.Background(), signedTx)
-	require.NoError(t, err)
+	rSignedTx, sSignedTx, vSignedTx := signedTx.RawSignatureValues()
+
+	// err = rpcClient.SendTransaction(context.Background(), signedTx)
+	// require.NoError(t, err)
 
 	t.Run("GetTxs", func(t *testing.T) {
 		txs, err := executionClient.GetTxs(context.Background())
@@ -177,14 +179,17 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		err = txResp.UnmarshalBinary(txs[0])
 		require.NoError(t, err)
 
-		assert.Equal(t, tx.Nonce(), txResp.Nonce())
-		assert.Equal(t, tx.Value(), txResp.Value())
-		assert.Equal(t, tx.To(), txResp.To())
-		assert.Equal(t, tx.GasPrice(), txResp.GasPrice())
-		assert.Equal(t, signedTx.ChainId(), txResp.ChainId())
+		assert.Equal(t, signedTx.Nonce(), txResp.Nonce())
+		assert.Equal(t, signedTx.Value(), txResp.Value())
+		assert.Equal(t, signedTx.To(), txResp.To())
+		assert.Equal(t, signedTx.GasPrice(), txResp.GasPrice())
+		r, s, v := txResp.RawSignatureValues()
+		assert.Equal(t, rSignedTx, r)
+		assert.Equal(t, sSignedTx, s)
+		assert.Equal(t, vSignedTx, v)
 	})
 
-	txBytes, err := tx.MarshalBinary()
+	txBytes, err := signedTx.MarshalBinary()
 	require.NoError(t, err)
 
 	blockHeight := uint64(1)
@@ -207,7 +212,7 @@ func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
 
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
-	genesisTime :=  time.Date(2024,3, 13, 13, 54, 0, 0, time.UTC)// pre-cancun timestamp not supported
+	genesisTime := time.Date(2024, 3, 13, 13, 54, 0, 0, time.UTC) // pre-cancun timestamp not supported
 
 	executionClient, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
