@@ -116,7 +116,7 @@ func (c *EngineAPIExecutionClient) Stop() {
 // InitChain initializes the blockchain with genesis information
 func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
 	var forkchoiceResult map[string]interface{}
-	
+
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		map[string]interface{}{
 			"headBlockHash":      c.genesisHash,
@@ -147,13 +147,12 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 
 	executionPayload := payloadResult["executionPayload"].(map[string]interface{})
 	stateRoot := common.HexToHash(executionPayload["stateRoot"].(string))
+	rollkitStateRoot := execution_types.Hash(stateRoot[:])
 
 	gasLimitHex := executionPayload["gasLimit"].(string)
 	gasLimit := new(big.Int)
 	gasLimit.SetString(gasLimitHex[2:], 16)
 
-	var rollkitStateRoot execution_types.Hash
-	copy(rollkitStateRoot[:], stateRoot[:])
 	return rollkitStateRoot, gasLimit.Uint64(), nil
 }
 
@@ -196,23 +195,41 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
 func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
-	ethTxs := make([][]byte, len(txs))
+	ethTxs := make([]string, len(txs))
 	for i, tx := range txs {
-		ethTxs[i] = tx
+		ethTxs[i] = common.Bytes2Hex(tx)
 	}
 
 	var newPayloadResult map[string]interface{}
-	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3", map[string]interface{}{
-		"parentHash":                  common.BytesToHash(prevStateRoot[:]),
-		"timestamp":                   timestamp.Unix(),
-		"prevRandao":                  c.derivePrevRandao(height),
-		"feeRecipient":                c.feeRecipient,
-		"transactions":                ethTxs,
-		"expectedBlobVersionedHashes": []string{},
-		"parentBeaconBlockRoot":       common.Hash{},
-	})
+	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
+		map[string]interface{}{
+			"stateRoot":     prevStateRoot.String(),
+			"parentHash":    common.BytesToHash(prevStateRoot[:]),
+			"timestamp":     fmt.Sprintf("0x%X", timestamp.Unix()),
+			"prevRandao":    c.derivePrevRandao(height),
+			"feeRecipient":  c.feeRecipient,
+			"transactions":  ethTxs,
+			"blobGasUsed":   "0x00",
+			"excessBlobGas": "0x00",
+			"withdrawals":   types.Withdrawals{},
+			"receiptsRoot":  "0x0000000000000000000000000000000000000000000000000000000000000000",
+			"logsBloom":     "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+			"blockNumber":   fmt.Sprintf("0x%X", height),
+			"gasLimit":      "0xf4240",
+			"gasUsed":       "0x5208",
+			"extraData":     "0x",
+			"baseFeePerGas": "0x7",
+			"blockHash":     "0x3559e851470f6e7bbed1db474980683e8c315bfce99b2a6ef47c057c04de7858", // TODO
+		},
+		// Expected blob versioned hashes
+		[]string{
+			"0x000657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014",
+		},
+		// Root of the parent beacon block
+		"0x169630f535b4a41330164c6e5c92b1224c0c407f582d407d0ac3d206cd32fd52",
+	)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %w", err)
+		return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %s", err.Error())
 	}
 
 	status, ok := newPayloadResult["status"].(string)

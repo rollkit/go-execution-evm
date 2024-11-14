@@ -126,8 +126,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	genesisHash := common.HexToHash(GENESIS_HASH)
 	genesisTime := time.Now().UTC().Truncate(time.Second)
 	genesisStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
-	var rollkitGenesisStateRoot rollkit_types.Hash
-	copy(rollkitGenesisStateRoot[:], genesisStateroot.Bytes())
+	rollkitGenesisStateRoot := rollkit_types.Hash(genesisStateroot[:])
 
 	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
 	require.NoError(t, err)
@@ -188,19 +187,22 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	txBytes, err := tx.MarshalBinary()
 	require.NoError(t, err)
 
+	blockHeight := uint64(1)
+	blockTime := genesisTime.Add(10 * time.Second)
+
 	t.Run("ExecuteTxs", func(t *testing.T) {
 		newStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
 		var rollkitNewStateRoot rollkit_types.Hash
 		copy(rollkitNewStateRoot[:], newStateroot.Bytes())
 
-		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, initialHeight, genesisTime, rollkitGenesisStateRoot)
+		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, blockHeight, blockTime, rollkitGenesisStateRoot)
 		require.NoError(t, err)
 		assert.Greater(t, gasLimit, gasUsed)
 		assert.Equal(t, newStateroot, stateroot)
 	})
 }
 
-func TestExecutionClient_InvalidPayloadTimestamp(t *testing.T) {
+func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
 	setupTestRethEngine(t)
 
 	initialHeight := uint64(0)
