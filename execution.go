@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"encoding/hex"
@@ -18,14 +19,6 @@ import (
 	execution "github.com/rollkit/go-execution"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
-)
-
-type PayloadStatus string
-
-const (
-	PayloadStatusValid   PayloadStatus = "VALID"
-	PayloadStatusInvalid PayloadStatus = "INVALID"
-	PayloadStatusSyncing PayloadStatus = "SYNCING"
 )
 
 var (
@@ -121,41 +114,37 @@ func (c *EngineAPIExecutionClient) Stop() {
 
 // InitChain initializes the blockchain with genesis information
 func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
-	var forkchoiceResult map[string]interface{}
+	var forkchoiceResult ForkchoiceUpdatedResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
-		map[string]interface{}{
-			"headBlockHash":      c.genesisHash,
-			"safeBlockHash":      c.genesisHash,
-			"finalizedBlockHash": c.genesisHash,
+		ForkchoiceState{
+			HeadBlockHash:      c.genesisHash,
+			SafeBlockHash:      c.genesisHash,
+			FinalizedBlockHash: c.genesisHash,
 		},
-		map[string]interface{}{
-			"timestamp":             genesisTime.Unix(),
-			"prevRandao":            common.Hash{},
-			"suggestedFeeRecipient": c.feeRecipient,
-			"parentBeaconBlockRoot": common.Hash{},
+		PayloadAttributes{
+			Timestamp:             genesisTime.Unix(),
+			PrevRandao:            common.Hash{},
+			SuggestedFeeRecipient: c.feeRecipient,
+			ParentBeaconBlockRoot: common.Hash{},
 		},
 	)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
 
-	payloadID, ok := forkchoiceResult["payloadId"].(string)
-	if !ok {
+	if forkchoiceResult.PayloadID == nil {
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
 	}
 
-	var payloadResult map[string]interface{}
-	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", payloadID)
+	var payloadResult PayloadResponse
+	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
 	}
 
-	executionPayload := payloadResult["executionPayload"].(map[string]interface{})
-	stateRoot := common.HexToHash(executionPayload["stateRoot"].(string))
-
-	gasLimitHex := executionPayload["gasLimit"].(string)
+	stateRoot := common.HexToHash(payloadResult.ExecutionPayload.StateRoot)
 	gasLimit := new(big.Int)
-	gasLimit.SetString(gasLimitHex[2:], 16)
+	gasLimit.SetString(strings.TrimPrefix(payloadResult.ExecutionPayload.GasLimit, "0x"), 16)
 
 	var rollkitStateRoot execution_types.Hash
 	copy(rollkitStateRoot[:], stateRoot[:])
@@ -206,62 +195,59 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		ethTxs[i] = tx
 	}
 
-	var newPayloadResult map[string]interface{}
-	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3", map[string]interface{}{
-		"parentHash":                  common.BytesToHash(prevStateRoot[:]),
-		"timestamp":                   timestamp.Unix(),
-		"prevRandao":                  c.derivePrevRandao(height),
-		"feeRecipient":                c.feeRecipient,
-		"transactions":                ethTxs,
-		"expectedBlobVersionedHashes": []string{},
-		"parentBeaconBlockRoot":       common.Hash{},
-	})
+	var newPayloadResult struct {
+		Status PayloadStatus `json:"status"`
+	}
+	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
+		NewPayloadRequest{
+			ParentHash:                  common.BytesToHash(prevStateRoot[:]),
+			Timestamp:                   timestamp.Unix(),
+			PrevRandao:                  c.derivePrevRandao(height),
+			FeeRecipient:                c.feeRecipient,
+			Transactions:                ethTxs,
+			ExpectedBlobVersionedHashes: []string{},
+			ParentBeaconBlockRoot:       common.Hash{},
+		},
+	)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %w", err)
 	}
 
-	status, ok := newPayloadResult["status"].(string)
-	if !ok || PayloadStatus(status) != PayloadStatusValid {
+	if newPayloadResult.Status != PayloadStatusValid {
 		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
 	}
 
-	// update fork choice
-	var forkchoiceResult map[string]interface{}
+	var forkchoiceResult ForkchoiceUpdatedResponse
 	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
-		map[string]interface{}{
-			"headBlockHash":      common.BytesToHash(prevStateRoot[:]),
-			"safeBlockHash":      common.BytesToHash(prevStateRoot[:]),
-			"finalizedBlockHash": common.BytesToHash(prevStateRoot[:]),
+		ForkchoiceState{
+			HeadBlockHash:      common.BytesToHash(prevStateRoot[:]),
+			SafeBlockHash:      common.BytesToHash(prevStateRoot[:]),
+			FinalizedBlockHash: common.BytesToHash(prevStateRoot[:]),
 		},
-		map[string]interface{}{
-			"timestamp":             timestamp.Unix(),
-			"prevRandao":            c.derivePrevRandao(height),
-			"suggestedFeeRecipient": c.feeRecipient,
-			"parentBeaconBlockRoot": common.Hash{},
+		PayloadAttributes{
+			Timestamp:             timestamp.Unix(),
+			PrevRandao:            c.derivePrevRandao(height),
+			SuggestedFeeRecipient: c.feeRecipient,
+			ParentBeaconBlockRoot: common.Hash{},
 		},
 	)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
 
-	// get the execution results
-	var payloadResult map[string]interface{}
-	payloadID, ok := forkchoiceResult["payloadId"].(string)
-	if !ok {
+	if forkchoiceResult.PayloadID == nil {
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
 	}
 
-	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", payloadID)
+	var payloadResult PayloadResponse
+	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
 	}
 
-	executionPayload := payloadResult["executionPayload"].(map[string]interface{})
-	newStateRoot := common.HexToHash(executionPayload["stateRoot"].(string))
-
-	gasUsedHex := executionPayload["gasUsed"].(string)
+	newStateRoot := common.HexToHash(payloadResult.ExecutionPayload.StateRoot)
 	gasUsed := new(big.Int)
-	gasUsed.SetString(gasUsedHex[2:], 16)
+	gasUsed.SetString(strings.TrimPrefix(payloadResult.ExecutionPayload.GasUsed, "0x"), 16)
 
 	var rollkitNewStateRoot execution_types.Hash
 	copy(rollkitNewStateRoot[:], newStateRoot[:])
@@ -275,28 +261,22 @@ func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) 
 		return fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
 
-	var forkchoiceResult map[string]interface{}
+	var forkchoiceResult ForkchoiceUpdatedResponse
 	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
-		map[string]interface{}{
-			"headBlockHash":      block.Hash(),
-			"safeBlockHash":      block.Hash(),
-			"finalizedBlockHash": block.Hash(),
+		ForkchoiceState{
+			HeadBlockHash:      block.Hash(),
+			SafeBlockHash:      block.Hash(),
+			FinalizedBlockHash: block.Hash(),
 		},
-		map[string]interface{}{
-			"parentBeaconBlockRoot": common.Hash{},
+		PayloadAttributes{
+			ParentBeaconBlockRoot: common.Hash{},
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("engine_forkchoiceUpdatedV3 failed for finalization: %w", err)
 	}
 
-	payloadStatus, ok := forkchoiceResult["payloadStatus"].(map[string]interface{})
-	if !ok {
-		return ErrNilPayloadStatus
-	}
-
-	status, ok := payloadStatus["status"].(string)
-	if !ok || PayloadStatus(status) != PayloadStatusValid {
+	if forkchoiceResult.PayloadStatus.Status != PayloadStatusValid {
 		return ErrInvalidPayloadStatus
 	}
 
