@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -10,10 +11,13 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/golang-jwt/jwt"
+
 	execution "github.com/rollkit/go-execution"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
@@ -196,41 +200,79 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
 func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
-	ethTxs := make([]string, len(txs))
+	ethTxs := make([]*types.Transaction, len(txs))
 	for i, tx := range txs {
-		ethTxs[i] = common.Bytes2Hex(tx)
+		ethTxs[i] = new(types.Transaction)
+		err := ethTxs[i].UnmarshalBinary(tx)
+		if err != nil {
+			return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %s", err.Error())
+		}
 	}
 
-	// todo: fix
-	blkHash := "0x5971982f5f6e01257226780fcdc571e5b3844cac6e91ab2b423152248c585cb0"
+	txsPayload := make([]string, len(txs))
+	for i, tx := range ethTxs {
+		buf := bytes.Buffer{}
+		err := tx.EncodeRLP(&buf)
+		if err != nil {
+			return execution_types.Hash{}, 0, fmt.Errorf("error RLP encoding tx: %s", err.Error())
+		}
+
+		txsPayload[i] = fmt.Sprintf("0x%x", buf.Bytes())
+	}
+
+	blockHeader := types.Header{
+		Root:          common.Hash(prevStateRoot),
+		ParentHash:    common.BytesToHash(prevStateRoot[:]),
+		UncleHash:     types.EmptyUncleHash,
+		Time:          uint64(1731729558), // timestamp.Unix
+		Coinbase:      c.feeRecipient,
+		MixDigest:     c.derivePrevRandao(height),
+		BlobGasUsed:   new(uint64),
+		ExcessBlobGas: new(uint64),
+		ReceiptHash:   common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
+		Bloom:         types.Bloom{},
+		Number:        big.NewInt(int64(height)),
+		GasLimit:      30000000,
+		GasUsed:       20000000,
+		Extra:         hexutil.Bytes("0x"),
+		BaseFee:       big.NewInt(7),
+		TxHash:        types.DeriveSha(types.Transactions(ethTxs), trie.NewStackTrie(nil)),
+		Difficulty:    big.NewInt(0),
+		Nonce:         types.BlockNonce{},
+	}
+
+	logsBloomStr, err := blockHeader.Bloom.MarshalText()
+	if err != nil {
+		return execution_types.Hash{}, 0, fmt.Errorf("invalid logs bloom: %w", err)
+	}
 
 	var newPayloadResult map[string]interface{}
-	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
+	err = c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
 		map[string]interface{}{
-			"stateRoot":     prevStateRoot.String(),
-			"parentHash":    common.BytesToHash(prevStateRoot[:]),
-			"timestamp":     fmt.Sprintf("0x%X", timestamp.Unix()),
-			"prevRandao":    c.derivePrevRandao(height),
-			"feeRecipient":  c.feeRecipient,
-			"transactions":  ethTxs,
-			"blobGasUsed":   "0x00",
-			"excessBlobGas": "0x00",
+			"stateRoot":     blockHeader.Root.Hex(),
+			"parentHash":    blockHeader.ParentHash.Hex(),
+			"timestamp":     hexutil.EncodeUint64(blockHeader.Time),
+			"prevRandao":    blockHeader.MixDigest.Hex(),
+			"feeRecipient":  blockHeader.Coinbase.Hex(),
+			"transactions":  txsPayload,
+			"blobGasUsed":   hexutil.EncodeUint64(*blockHeader.BlobGasUsed),
+			"excessBlobGas": hexutil.EncodeUint64(*blockHeader.ExcessBlobGas),
 			"withdrawals":   []struct{}{},
-			"receiptsRoot":  "0x0000000000000000000000000000000000000000000000000000000000000000",
-			"logsBloom":     "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-			"blockNumber":   fmt.Sprintf("0x%X", height),
-			"gasLimit":      "0xf4240",
-			"gasUsed":       "0x5208",
+			"receiptsRoot":  blockHeader.ReceiptHash.Hex(),
+			"logsBloom":     string(logsBloomStr),
+			"blockNumber":   hexutil.EncodeBig(blockHeader.Number),
+			"gasLimit":      hexutil.EncodeUint64(blockHeader.GasLimit),
+			"gasUsed":       hexutil.EncodeUint64(blockHeader.GasUsed),
 			"extraData":     "0x",
-			"baseFeePerGas": "0x7",
-			"blockHash":     blkHash, 
+			"baseFeePerGas": hexutil.EncodeBig(blockHeader.BaseFee),
+			"blockHash":     blockHeader.Hash().Hex(), // Keccak256(RLP(ExecutionBlockHeader))
 		},
 		// Expected blob versioned hashes
 		[]string{
 			"0x0000000000000000000000000000000000000000000000000000000000000000",
 		},
 		// Root of the parent beacon block
-		c.genesisHash.String(),
+		c.genesisHash.Hex(),
 	)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %s", err.Error())

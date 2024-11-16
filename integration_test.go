@@ -25,17 +25,17 @@ import (
 const (
 	TEST_ETH_URL    = "http://localhost:8545"
 	TEST_ENGINE_URL = "http://localhost:8551"
+	JWT_SECRET      = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65"
 
-	CHAIN_ID     = "1234"
-	GENESIS_HASH = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
-	JWT_SECRET   = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65"
+	CHAIN_ID          = "1234"
+	GENESIS_HASH      = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
+	GENESIS_STATEROOT = "0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4"
+	TEST_PRIVATE_KEY  = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
+	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 
 	DOCKER_CHAIN_PATH      = "./docker/chain"     // path relative to the test file
 	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" // path relative to the test file
 	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
-
-	TEST_PRIVATE_KEY = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
-	TEST_TO_ADDRESS  = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 )
 
 func setupTestRethEngine(t *testing.T) {
@@ -125,7 +125,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
 	genesisTime := time.Now().UTC().Truncate(time.Second)
-	genesisStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
+	genesisStateroot := common.HexToHash(GENESIS_STATEROOT)
 	rollkitGenesisStateRoot := rollkit_types.Hash(genesisStateroot[:])
 
 	_, err := ethclient.Dial(TEST_ETH_URL)
