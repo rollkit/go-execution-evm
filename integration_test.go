@@ -55,7 +55,7 @@ func setupTestRethEngine(t *testing.T) {
 
 	rethContainer, err := cli.ContainerCreate(context.Background(),
 		&container.Config{
-			Image:      "ghcr.io/paradigmxyz/reth",
+			Image:      "ghcr.io/paradigmxyz/reth:v1.1.1",
 			Entrypoint: []string{"/bin/sh", "-c"},
 			Cmd: []string{
 				`
