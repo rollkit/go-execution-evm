@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"encoding/hex"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rollkit/go-execution-evm/mocks"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
@@ -174,6 +176,16 @@ func newMockEthAPI(t *testing.T) *mockEthAPI {
 	return mock
 }
 
+// Helper function to generate a test JWT secret
+func generateTestJWTSecret() string {
+	// Generate a random 32-byte hex string for testing
+	secret := make([]byte, 32)
+	for i := range secret {
+		secret[i] = byte(i)
+	}
+	return hex.EncodeToString(secret)
+}
+
 func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 	mockEngine := mocks.NewMockEngineAPI(t)
 	defer mockEngine.Close()
@@ -181,11 +193,12 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 	mockEth := mocks.NewMockEthAPI(t)
 	defer mockEth.Close()
 
+	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
-		"",
+		jwtSecret,
 		common.Hash{},
 		common.Address{},
 	)
@@ -220,11 +233,12 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	mockEth := mocks.NewMockEthAPI(t)
 	defer mockEth.Close()
 
+	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
-		"",
+		jwtSecret,
 		common.Hash{},
 		common.Address{},
 	)
@@ -269,11 +283,12 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 	mockEth := mocks.NewMockEthAPI(t)
 	defer mockEth.Close()
 
+	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
-		"",
+		jwtSecret,
 		common.Hash{},
 		common.Address{},
 	)
@@ -336,11 +351,12 @@ func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
 	mockEth := mocks.NewMockEthAPI(t)
 	defer mockEth.Close()
 
+	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
-		"",
+		jwtSecret,
 		common.Hash{},
 		common.Address{},
 	)
