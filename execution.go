@@ -129,7 +129,7 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			Timestamp:             uint64(genesisTime.Unix()),
 			Random:                common.Hash{},
 			SuggestedFeeRecipient: c.feeRecipient,
-			BeaconRoot:            nil,
+			BeaconRoot:            &c.genesisHash,
 			Withdrawals:           []*types.Withdrawal{},
 		},
 	)
