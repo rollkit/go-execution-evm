@@ -212,7 +212,7 @@ func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
 
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
-	genesisTime := time.Date(2024, 3, 13, 13, 54, 0, 0, time.UTC) // pre-cancun timestamp not supported
+	blockTime := time.Date(2024, 3, 13, 13, 54, 0, 0, time.UTC) // pre-cancun timestamp not supported
 
 	executionClient, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
@@ -224,7 +224,7 @@ func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, _, err = executionClient.InitChain(context.Background(), genesisTime, initialHeight, CHAIN_ID)
+	_, _, err = executionClient.InitChain(context.Background(), blockTime, initialHeight, CHAIN_ID)
 	// payload timestamp is not within the cancun timestamp
 	require.Error(t, err)
 	require.ErrorContains(t, err, "Unsupported fork")
