@@ -62,7 +62,7 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 					"latestValidHash": nil,
 					"validationError": nil,
 				},
-				"payloadId": "0x1234",
+				"payloadId": "0x123456789abcdef0",
 			}
 		case "engine_getPayloadV3":
 			resp = map[string]interface{}{

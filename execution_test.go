@@ -55,8 +55,7 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 	require.NoError(t, err)
 
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	var expectedStateRoot execution_types.Hash
-	copy(expectedStateRoot[:], mockStateRoot.Bytes())
+	expectedStateRoot := execution_types.Hash(mockStateRoot[:])
 
 	require.Equal(t, expectedStateRoot, stateRoot)
 	require.Equal(t, uint64(1000000), gasLimit)
