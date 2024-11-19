@@ -120,7 +120,7 @@ func setupTestRethEngine(t *testing.T) {
 }
 
 func TestExecutionClientLifecycle(t *testing.T) {
-	// setupTestRethEngine(t)
+	setupTestRethEngine(t)
 
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
@@ -128,7 +128,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	genesisStateroot := common.HexToHash(GENESIS_STATEROOT)
 	rollkitGenesisStateRoot := rollkit_types.Hash(genesisStateroot[:])
 
-	_, err := ethclient.Dial(TEST_ETH_URL)
+	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
 	require.NoError(t, err)
 
 	executionClient, err := NewEngineAPIExecutionClient(
@@ -167,8 +167,8 @@ func TestExecutionClientLifecycle(t *testing.T) {
 
 	rSignedTx, sSignedTx, vSignedTx := signedTx.RawSignatureValues()
 
-	// err = rpcClient.SendTransaction(context.Background(), signedTx)
-	// require.NoError(t, err)
+	err = rpcClient.SendTransaction(context.Background(), signedTx)
+	require.NoError(t, err)
 
 	t.Run("GetTxs", func(t *testing.T) {
 		txs, err := executionClient.GetTxs(context.Background())
