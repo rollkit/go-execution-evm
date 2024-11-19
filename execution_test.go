@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/rollkit/go-execution-evm/mocks"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
@@ -88,10 +90,11 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	blockHeight := uint64(1)
 	timestamp := time.Now().UTC().Truncate(time.Second)
 
-	var prevStateRoot execution_types.Hash
-	copy(prevStateRoot[:], []byte{1, 2, 3})
+	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
 
-	testTx := execution_types.Tx("test transaction")
+	testTxBytes, err := types.NewTransaction(1, common.Address{}, big.NewInt(0), 1000, big.NewInt(875000000), nil).MarshalBinary()
+	require.NoError(t, err)
+	testTx := execution_types.Tx(testTxBytes)
 
 	ctx := context.Background()
 	stateRoot, gasUsed, err := client.ExecuteTxs(

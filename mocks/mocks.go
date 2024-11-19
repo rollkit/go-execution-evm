@@ -43,7 +43,7 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 		case "engine_newPayloadV3":
 			resp = map[string]interface{}{
 				"status":          "VALID",
-				"latestValidHash": "0x1234",
+				"latestValidHash": "0x222211113333444455556666777788889999aaaabbbbccccddddeeeeffff0000",
 				"validationError": nil,
 			}
 		case "engine_forkchoiceUpdatedV3":
