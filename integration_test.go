@@ -201,7 +201,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, blockHeight, blockTime, rollkitGenesisStateRoot)
 		require.NoError(t, err)
 		assert.Greater(t, gasLimit, gasUsed)
-		assert.Equal(t, newStateroot.Bytes(), []byte(stateroot))
+		assert.Equal(t, rollkit_types.Hash(newStateroot[:]), stateroot)
 	})
 }
 

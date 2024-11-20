@@ -145,7 +145,7 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
 	}
 
-	stateRoot := common.HexToHash(payloadResult.ExecutionPayload.StateRoot.Hex())
+	stateRoot := payloadResult.ExecutionPayload.StateRoot
 	rollkitStateRoot := execution_types.Hash(stateRoot[:])
 
 	gasLimit := payloadResult.ExecutionPayload.GasLimit

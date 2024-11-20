@@ -77,20 +77,20 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	defer mockEth.Close()
 
 	jwtSecret := generateTestJWTSecret()
+	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
+
 	client, err := NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
 		jwtSecret,
-		common.Hash{},
+		common.Hash(prevStateRoot),
 		common.Address{},
 	)
 	require.NoError(t, err)
 
 	blockHeight := uint64(1)
 	timestamp := time.Now().UTC().Truncate(time.Second)
-
-	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
 
 	testTxBytes, err := types.NewTransaction(1, common.Address{}, big.NewInt(0), 1000, big.NewInt(875000000), nil).MarshalBinary()
 	require.NoError(t, err)
@@ -113,10 +113,8 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.FinalizedBlockHash)
 
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	var expectedStateRoot execution_types.Hash
-	copy(expectedStateRoot[:], mockStateRoot.Bytes())
 
-	require.Equal(t, expectedStateRoot, stateRoot)
+	require.Equal(t, execution_types.Hash(mockStateRoot[:]), stateRoot)
 	require.Equal(t, uint64(21000), gasUsed)
 }
 
