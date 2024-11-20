@@ -10,20 +10,23 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/golang-jwt/jwt/v5"
-	execution "github.com/rollkit/go-execution"
+	"github.com/rollkit/go-execution"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
 )
 
 var (
-	ErrNilPayloadStatus     = errors.New("nil payload status")
+	// ErrNilPayloadStatus indicates that PayloadID returned by EVM was nil
+	ErrNilPayloadStatus = errors.New("nil payload status")
+	// ErrInvalidPayloadStatus indicates that EVM returned status != VALID
 	ErrInvalidPayloadStatus = errors.New("invalid payload status")
 )
 
@@ -32,7 +35,6 @@ var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
 
 // EngineAPIExecutionClient implements the execution.Execute interface
 type EngineAPIExecutionClient struct {
-	proxyClient  *proxy_json_rpc.Client
 	engineClient *rpc.Client // engine api
 	ethClient    *ethclient.Client
 	genesisHash  common.Hash
@@ -88,7 +90,6 @@ func NewEngineAPIExecutionClient(
 	}
 
 	return &EngineAPIExecutionClient{
-		proxyClient:  proxyClient,
 		engineClient: engineClient,
 		ethClient:    ethClient,
 		genesisHash:  genesisHash,
@@ -97,14 +98,12 @@ func NewEngineAPIExecutionClient(
 }
 
 // Start starts the execution client
-func (c *EngineAPIExecutionClient) Start(url string) error {
-	return c.proxyClient.Start(url)
+func (c *EngineAPIExecutionClient) Start() error {
+	return nil
 }
 
 // Stop stops the execution client and closes all connections
 func (c *EngineAPIExecutionClient) Stop() {
-	c.proxyClient.Stop()
-
 	if c.engineClient != nil {
 		c.engineClient.Close()
 	}
@@ -124,7 +123,7 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			FinalizedBlockHash: c.genesisHash,
 		},
 		engine.PayloadAttributes{
-			Timestamp:             uint64(genesisTime.Unix()),
+			Timestamp:             uint64(genesisTime.Unix()), //nolint:gosec // disable G115
 			Random:                common.Hash{},
 			SuggestedFeeRecipient: c.feeRecipient,
 			BeaconRoot:            &c.genesisHash,
@@ -222,7 +221,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 			FinalizedBlockHash: c.genesisHash,
 		},
 		&engine.PayloadAttributes{
-			Timestamp:             uint64(timestamp.Unix()),
+			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115
 			Random:                c.derivePrevRandao(height),
 			SuggestedFeeRecipient: c.feeRecipient,
 			Withdrawals:           []*types.Withdrawal{},
@@ -264,7 +263,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 
 // SetFinal marks a block at the given height as final
 func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) error {
-	block, err := c.ethClient.BlockByNumber(ctx, big.NewInt(int64(height)))
+	block, err := c.ethClient.BlockByNumber(ctx, big.NewInt(int64(height))) //nolint:gosec // disable G115
 	if err != nil {
 		return fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
@@ -293,5 +292,5 @@ func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) 
 
 // derivePrevRandao generates a deterministic prevRandao value based on block height
 func (c *EngineAPIExecutionClient) derivePrevRandao(blockHeight uint64) common.Hash {
-	return common.BigToHash(big.NewInt(int64(blockHeight)))
+	return common.BigToHash(big.NewInt(int64(blockHeight))) //nolint:gosec // disable G115
 }

@@ -12,10 +12,10 @@ services:
       timeout: 5s
       retries: 3
     command: >
-      /bin/sh -c "mkdir -p /jwt && 
-      if [ ! -f /jwt/jwt.hex ]; then 
+      /bin/sh -c "mkdir -p /jwt &&
+      if [ ! -f /jwt/jwt.hex ]; then
         apk add --no-cache openssl &&
-        openssl rand -hex 32 | tr -d '\n' > /jwt/jwt.hex; 
+        openssl rand -hex 32 | tr -d '\n' > /jwt/jwt.hex;
       fi"
 
   reth:
@@ -38,8 +38,8 @@ services:
       - ./jwttoken:/root/jwt:ro
       - ./chain:/root/chain:ro
     pid: host
-    entrypoint: /bin/sh -c 
-    command: 
+    entrypoint: /bin/sh -c
+    command:
       - |
           reth init --chain /root/chain/genesis.json
           reth node \
