@@ -8,15 +8,14 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/golang-jwt/jwt/v5"
 	execution "github.com/rollkit/go-execution"
@@ -194,117 +193,88 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
 func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
+	// Convert rollkit transactions to Ethereum transactions
 	ethTxs := make([]*types.Transaction, len(txs))
 	for i, tx := range txs {
 		ethTxs[i] = new(types.Transaction)
 		err := ethTxs[i].UnmarshalBinary(tx)
 		if err != nil {
-			return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %s", err.Error())
+			return execution_types.Hash{}, 0, fmt.Errorf("failed to unmarshal transaction: %w", err)
 		}
 	}
 
+	// Encode transactions for payload
 	txsPayload := make([][]byte, len(txs))
 	for i, tx := range ethTxs {
 		buf := bytes.Buffer{}
 		err := tx.EncodeRLP(&buf)
 		if err != nil {
-			return execution_types.Hash{}, 0, fmt.Errorf("error RLP encoding tx: %s", err.Error())
+			return execution_types.Hash{}, 0, fmt.Errorf("failed to RLP encode tx: %w", err)
 		}
-
 		txsPayload[i] = buf.Bytes()
 	}
 
-	blockHeader := types.Header{
-		Root:          common.Hash(prevStateRoot),
-		ParentHash:    common.BytesToHash(prevStateRoot[:]),
-		UncleHash:     types.EmptyUncleHash,
-		Time:          uint64(1731729558), // timestamp.Unix
-		Coinbase:      c.feeRecipient,
-		MixDigest:     c.derivePrevRandao(height),
-		BlobGasUsed:   new(uint64),
-		ExcessBlobGas: new(uint64),
-		ReceiptHash:   common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
-		Bloom:         types.Bloom{},
-		Number:        big.NewInt(int64(height)),
-		GasLimit:      30000000,
-		GasUsed:       20000000,
-		Extra:         hexutil.Bytes("0x"),
-		BaseFee:       big.NewInt(7),
-		TxHash:        types.DeriveSha(types.Transactions(ethTxs), trie.NewStackTrie(nil)),
-		Difficulty:    big.NewInt(0),
-		Nonce:         types.BlockNonce{},
-	}
-
-	var newPayloadResult engine.PayloadStatusV1
-	err := c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
-		engine.ExecutableData{
-			StateRoot:     blockHeader.Root,
-			ParentHash:    blockHeader.ParentHash,
-			Timestamp:     blockHeader.Time,
-			Random:        blockHeader.MixDigest,
-			FeeRecipient:  blockHeader.Coinbase,
-			Transactions:  txsPayload,
-			BlobGasUsed:   blockHeader.BlobGasUsed,
-			ExcessBlobGas: blockHeader.ExcessBlobGas,
-			Withdrawals:   []*types.Withdrawal{},
-			ReceiptsRoot:  blockHeader.ReceiptHash,
-			LogsBloom:     blockHeader.Bloom[:],
-			Number:        blockHeader.Number.Uint64(),
-			GasLimit:      blockHeader.GasLimit,
-			GasUsed:       blockHeader.GasUsed,
-			ExtraData:     []byte("0x"),
-			BaseFeePerGas: blockHeader.BaseFee,
-			BlockHash:     blockHeader.Hash(), // Keccak256(RLP(ExecutionBlockHeader))
-		},
-		// Expected blob versioned hashes
-		[]string{
-			"0x0000000000000000000000000000000000000000000000000000000000000000",
-		},
-		// Root of the parent beacon block
-		c.genesisHash.Hex(),
-	)
-	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_newPayloadV3 failed: %s", err.Error())
-	}
-
-	if newPayloadResult.Status != engine.VALID {
-		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
-	}
-
+	// Update forkchoice with payload attributes
 	var forkchoiceResult engine.ForkChoiceResponse
-	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
-			HeadBlockHash:      common.BytesToHash(prevStateRoot[:]),
-			SafeBlockHash:      common.BytesToHash(prevStateRoot[:]),
-			FinalizedBlockHash: common.BytesToHash(prevStateRoot[:]),
+			HeadBlockHash:      c.genesisHash,
+			SafeBlockHash:      c.genesisHash,
+			FinalizedBlockHash: c.genesisHash,
 		},
-		engine.PayloadAttributes{
+		&engine.PayloadAttributes{
 			Timestamp:             uint64(timestamp.Unix()),
 			Random:                c.derivePrevRandao(height),
 			SuggestedFeeRecipient: c.feeRecipient,
-			BeaconRoot:            nil,
+			Withdrawals:           []*types.Withdrawal{},
+			BeaconRoot:            &c.genesisHash,
 		},
 	)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
+		return execution_types.Hash{}, 0, fmt.Errorf("forkchoice update failed: %w", err)
 	}
 
 	if forkchoiceResult.PayloadID == nil {
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
 	}
 
+	// Get the built payload
 	var payloadResult engine.ExecutionPayloadEnvelope
 	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
+		return execution_types.Hash{}, 0, fmt.Errorf("get payload failed: %w", err)
 	}
 
-	newStateRoot := common.HexToHash(payloadResult.ExecutionPayload.StateRoot.Hex())
-	gasUsed := payloadResult.ExecutionPayload.GasUsed
+	// Submit the new payload
+	var newPayloadResult engine.PayloadStatusV1
+	err = c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
+		payloadResult.ExecutionPayload,
+		[]string{}, // No blob hashes
+		c.genesisHash.Hex(),
+	)
+	if err != nil {
+		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed: %w", err)
+	}
 
-	var rollkitNewStateRoot execution_types.Hash
-	copy(rollkitNewStateRoot[:], newStateRoot[:])
-	return rollkitNewStateRoot, gasUsed, nil
+	if newPayloadResult.Status != engine.VALID {
+		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
+	}
+
+	// convert the state root from the payload
+	stateRootHex := payloadResult.ExecutionPayload.StateRoot.String()
+	stateRootBytes, err := hex.DecodeString(strings.TrimPrefix(stateRootHex, "0x"))
+	if err != nil {
+		return execution_types.Hash{}, 0, fmt.Errorf("failed to decode state root hex: %w", err)
+	}
+
+	var rollkitStateRoot execution_types.Hash
+	copy(rollkitStateRoot[:], stateRootBytes)
+
+	fmt.Printf("State root hex: %s\n", stateRootHex)
+	fmt.Printf("State root bytes: %x\n", stateRootBytes)
+	fmt.Printf("Rollkit state root: %x\n", rollkitStateRoot) // DEBUG: always nil
+
+	return rollkitStateRoot, payloadResult.ExecutionPayload.GasUsed, nil
 }
 
 // SetFinal marks a block at the given height as final
