@@ -1,4 +1,4 @@
-## Architecture
+# Architecture
 
 ```mermaid
 graph LR
@@ -64,7 +64,7 @@ The architecture consists of several key components:
 ## Development
 
 ```bash
-$ cd docker
-$ docker compose up -d
-$ docker compose down
+cd docker
+docker compose up -d
+docker compose down
 ```
