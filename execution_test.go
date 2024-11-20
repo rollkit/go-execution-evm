@@ -1,7 +1,8 @@
-package execution
+package execution_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"math/big"
@@ -10,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"encoding/hex"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/rollkit/go-execution-evm/mocks"
+
+	"github.com/rollkit/go-execution-evm"
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
-	"github.com/stretchr/testify/require"
 )
 
 // Helper function to generate a test JWT secret
@@ -31,14 +32,14 @@ func generateTestJWTSecret() string {
 }
 
 func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
-	mockEngine := mocks.NewMockEngineAPI(t)
+	mockEngine := NewMockEngineAPI(t)
 	defer mockEngine.Close()
 
-	mockEth := mocks.NewMockEthAPI(t)
+	mockEth := NewMockEthAPI(t)
 	defer mockEth.Close()
 
 	jwtSecret := generateTestJWTSecret()
-	client, err := NewEngineAPIExecutionClient(
+	client, err := execution.NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
@@ -70,16 +71,16 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 }
 
 func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
-	mockEngine := mocks.NewMockEngineAPI(t)
+	mockEngine := NewMockEngineAPI(t)
 	defer mockEngine.Close()
 
-	mockEth := mocks.NewMockEthAPI(t)
+	mockEth := NewMockEthAPI(t)
 	defer mockEth.Close()
 
 	jwtSecret := generateTestJWTSecret()
 	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
 
-	client, err := NewEngineAPIExecutionClient(
+	client, err := execution.NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
@@ -119,14 +120,14 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 }
 
 func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
-	mockEngine := mocks.NewMockEngineAPI(t)
+	mockEngine := NewMockEngineAPI(t)
 	defer mockEngine.Close()
 
-	mockEth := mocks.NewMockEthAPI(t)
+	mockEth := NewMockEthAPI(t)
 	defer mockEth.Close()
 
 	jwtSecret := generateTestJWTSecret()
-	client, err := NewEngineAPIExecutionClient(
+	client, err := execution.NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
@@ -172,11 +173,12 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 			}
 		}
 
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		err = json.NewEncoder(w).Encode(map[string]interface{}{
 			"jsonrpc": "2.0",
 			"id":      req["id"],
 			"result":  resp,
 		})
+		require.NoError(t, err)
 	}))
 
 	ctx := context.Background()
@@ -187,14 +189,14 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 }
 
 func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
-	mockEngine := mocks.NewMockEngineAPI(t)
+	mockEngine := NewMockEngineAPI(t)
 	defer mockEngine.Close()
 
-	mockEth := mocks.NewMockEthAPI(t)
+	mockEth := NewMockEthAPI(t)
 	defer mockEth.Close()
 
 	jwtSecret := generateTestJWTSecret()
-	client, err := NewEngineAPIExecutionClient(
+	client, err := execution.NewEngineAPIExecutionClient(
 		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,

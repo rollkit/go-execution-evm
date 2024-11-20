@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -15,8 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	rollkit_types "github.com/rollkit/go-execution/types"
@@ -25,7 +26,7 @@ import (
 const (
 	TEST_ETH_URL    = "http://localhost:8545"
 	TEST_ENGINE_URL = "http://localhost:8551"
-	JWT_SECRET      = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65"
+	JWT_SECRET      = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65" //nolint:gosec
 
 	CHAIN_ID          = "1234"
 	GENESIS_HASH      = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
@@ -34,7 +35,7 @@ const (
 	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 
 	DOCKER_CHAIN_PATH      = "./docker/chain"     // path relative to the test file
-	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" // path relative to the test file
+	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" //nolint:gosec // path relative to the test file
 	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
 )
 
@@ -47,7 +48,7 @@ func setupTestRethEngine(t *testing.T) {
 	jwtSecretPath, err := filepath.Abs(DOCKER_JWTSECRET_PATH)
 	require.NoError(t, err)
 
-	err = os.WriteFile(DOCKER_JWTSECRET_PATH+DOCKER_JWT_SECRET_FILE, []byte(JWT_SECRET), 0644)
+	err = os.WriteFile(DOCKER_JWTSECRET_PATH+DOCKER_JWT_SECRET_FILE, []byte(JWT_SECRET), 0600)
 	require.NoError(t, err)
 
 	cli, err := client.NewClientWithOpts()
