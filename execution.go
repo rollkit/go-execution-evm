@@ -259,21 +259,6 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
 	}
 
-	// convert the state root from the payload
-	// stateRootHex := payloadResult.ExecutionPayload.StateRoot.String()
-	// stateRootBytes, err := hex.DecodeString(strings.TrimPrefix(stateRootHex, "0x"))
-	// if err != nil {
-	// 	return execution_types.Hash{}, 0, fmt.Errorf("failed to decode state root hex: %w", err)
-	// }
-
-	// var rollkitStateRoot execution_types.Hash
-	// copy(rollkitStateRoot[:], stateRootBytes)
-
-	fmt.Printf("State root: %x\n", payloadResult.ExecutionPayload.StateRoot.Bytes())
-	fmt.Printf("State root hex: %s\n", payloadResult.ExecutionPayload.StateRoot.String())
-	// fmt.Printf("State root bytes: %x\n", stateRootBytes)
-	//fmt.Printf("Rollkit state root: %x\n", rollkitStateRoot) // DEBUG: always nil
-
 	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasUsed, nil
 }
 
