@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	rollkit_types "github.com/rollkit/go-execution/types"
 )
 
@@ -132,7 +131,6 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	executionClient, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
 		JWT_SECRET,
@@ -213,7 +211,6 @@ func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
 	blockTime := time.Date(2024, 3, 13, 13, 54, 0, 0, time.UTC) // pre-cancun timestamp not supported
 
 	executionClient, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
 		JWT_SECRET,
