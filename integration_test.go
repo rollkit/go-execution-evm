@@ -197,13 +197,11 @@ func TestExecutionClientLifecycle(t *testing.T) {
 
 	t.Run("ExecuteTxs", func(t *testing.T) {
 		newStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
-		var rollkitNewStateRoot rollkit_types.Hash
-		copy(rollkitNewStateRoot[:], newStateroot.Bytes())
 
 		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, blockHeight, blockTime, rollkitGenesisStateRoot)
 		require.NoError(t, err)
 		assert.Greater(t, gasLimit, gasUsed)
-		assert.Equal(t, newStateroot, stateroot)
+		assert.Equal(t, newStateroot.Bytes(), []byte(stateroot))
 	})
 }
 

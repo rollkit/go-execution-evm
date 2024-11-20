@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/beacon/engine"
@@ -193,7 +192,7 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
 func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
-	// Convert rollkit transactions to Ethereum transactions
+	// convert rollkit tx to eth tx
 	ethTxs := make([]*types.Transaction, len(txs))
 	for i, tx := range txs {
 		ethTxs[i] = new(types.Transaction)
@@ -203,7 +202,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		}
 	}
 
-	// Encode transactions for payload
+	// encode
 	txsPayload := make([][]byte, len(txs))
 	for i, tx := range ethTxs {
 		buf := bytes.Buffer{}
@@ -214,7 +213,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		txsPayload[i] = buf.Bytes()
 	}
 
-	// Update forkchoice with payload attributes
+	// update forkchoice
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
@@ -238,14 +237,14 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
 	}
 
-	// Get the built payload
+	// get payload
 	var payloadResult engine.ExecutionPayloadEnvelope
 	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("get payload failed: %w", err)
 	}
 
-	// Submit the new payload
+	// submit payload
 	var newPayloadResult engine.PayloadStatusV1
 	err = c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
 		payloadResult.ExecutionPayload,
@@ -261,20 +260,21 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	}
 
 	// convert the state root from the payload
-	stateRootHex := payloadResult.ExecutionPayload.StateRoot.String()
-	stateRootBytes, err := hex.DecodeString(strings.TrimPrefix(stateRootHex, "0x"))
-	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("failed to decode state root hex: %w", err)
-	}
+	// stateRootHex := payloadResult.ExecutionPayload.StateRoot.String()
+	// stateRootBytes, err := hex.DecodeString(strings.TrimPrefix(stateRootHex, "0x"))
+	// if err != nil {
+	// 	return execution_types.Hash{}, 0, fmt.Errorf("failed to decode state root hex: %w", err)
+	// }
 
-	var rollkitStateRoot execution_types.Hash
-	copy(rollkitStateRoot[:], stateRootBytes)
+	// var rollkitStateRoot execution_types.Hash
+	// copy(rollkitStateRoot[:], stateRootBytes)
 
-	fmt.Printf("State root hex: %s\n", stateRootHex)
-	fmt.Printf("State root bytes: %x\n", stateRootBytes)
-	fmt.Printf("Rollkit state root: %x\n", rollkitStateRoot) // DEBUG: always nil
+	fmt.Printf("State root: %x\n", payloadResult.ExecutionPayload.StateRoot.Bytes())
+	fmt.Printf("State root hex: %s\n", payloadResult.ExecutionPayload.StateRoot.String())
+	// fmt.Printf("State root bytes: %x\n", stateRootBytes)
+	//fmt.Printf("Rollkit state root: %x\n", rollkitStateRoot) // DEBUG: always nil
 
-	return rollkitStateRoot, payloadResult.ExecutionPayload.GasUsed, nil
+	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasUsed, nil
 }
 
 // SetFinal marks a block at the given height as final
