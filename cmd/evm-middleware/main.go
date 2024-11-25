@@ -46,7 +46,7 @@ func main() {
 	genesis := core.DefaultGenesisBlock()
 	genesisHash = genesis.ToBlock().Hash()
 
-	evmClient, err := evm.NewEngineAPIExecutionClient("http://:8545", "http://8551", jwtSecret, genesisHash, feeRecipient)
+	evmClient, err := evm.NewEngineAPIExecutionClient("http://:8545", "http://:8551", jwtSecret, genesisHash, feeRecipient)
 	if err != nil {
 		log.Fatalf("failed to create Engine API client middleware: %v", err)
 	}
