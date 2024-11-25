@@ -13,10 +13,19 @@ help: Makefile
 	@sed -n 's/^##//p' $< | column -t -s ':' |  sed -e 's/^/ /'
 .PHONY: help
 
+## build: build evm-middleware binary
+build: build/evm-middleware
+.PHONY: build
+
+build/evm-middleware: cmd/evm-middleware/main.go execution.go go.mod go.sum
+	@echo "Building build/evm-middleware"
+	@go build -o build/evm-middleware ./cmd/evm-middleware
+
 ## clean: clean testcache
 clean:
-	@echo "--> Clearing testcache"
+	@echo "--> Clearing testcache & build directory"
 	@go clean --testcache
+	@rm -rf build
 .PHONY: clean
 
 ## cover: generate to code coverage report.
@@ -53,6 +62,8 @@ lint: vet
 fmt:
 	@echo "--> Formatting markdownlint"
 	@markdownlint --config .markdownlint.yaml '**/*.md' -f
+	@echo "--> Formatting go"
+	@golangci-lint run --fix
 .PHONY: fmt
 
 ## vet: Run go vet
