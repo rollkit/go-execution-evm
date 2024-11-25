@@ -64,6 +64,7 @@ The architecture consists of several key components:
 ## Development
 
 Run RETH in docker:
+
 ```bash
 cd docker
 docker compose up -d
@@ -71,6 +72,7 @@ docker compose down
 ```
 
 Compile `evm-middleware` binary:
+
 ```bash
 make build
 ```
