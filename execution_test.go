@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/rollkit/go-execution-evm/mocks"
-	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +38,6 @@ func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
 
 	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
 		jwtSecret,
@@ -80,7 +78,6 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
 
 	client, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
 		jwtSecret,
@@ -127,7 +124,6 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 
 	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
 		jwtSecret,
@@ -195,7 +191,6 @@ func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
 
 	jwtSecret := generateTestJWTSecret()
 	client, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
 		mockEth.URL,
 		mockEngine.URL,
 		jwtSecret,

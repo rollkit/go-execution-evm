@@ -18,7 +18,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	execution "github.com/rollkit/go-execution"
-	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
 	execution_types "github.com/rollkit/go-execution/types"
 )
 
@@ -32,7 +31,6 @@ var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
 
 // EngineAPIExecutionClient implements the execution.Execute interface
 type EngineAPIExecutionClient struct {
-	proxyClient  *proxy_json_rpc.Client
 	engineClient *rpc.Client // engine api
 	ethClient    *ethclient.Client
 	genesisHash  common.Hash
@@ -41,16 +39,12 @@ type EngineAPIExecutionClient struct {
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
 func NewEngineAPIExecutionClient(
-	proxyConfig *proxy_json_rpc.Config,
 	ethURL,
 	engineURL string,
 	jwtSecret string,
 	genesisHash common.Hash,
 	feeRecipient common.Address,
 ) (*EngineAPIExecutionClient, error) {
-	proxyClient := proxy_json_rpc.NewClient()
-	proxyClient.SetConfig(proxyConfig)
-
 	ethClient, err := ethclient.Dial(ethURL)
 	if err != nil {
 		return nil, err
@@ -88,7 +82,6 @@ func NewEngineAPIExecutionClient(
 	}
 
 	return &EngineAPIExecutionClient{
-		proxyClient:  proxyClient,
 		engineClient: engineClient,
 		ethClient:    ethClient,
 		genesisHash:  genesisHash,
@@ -97,13 +90,12 @@ func NewEngineAPIExecutionClient(
 }
 
 // Start starts the execution client
-func (c *EngineAPIExecutionClient) Start(url string) error {
-	return c.proxyClient.Start(url)
+func (c *EngineAPIExecutionClient) Start() error {
+	return nil
 }
 
 // Stop stops the execution client and closes all connections
 func (c *EngineAPIExecutionClient) Stop() {
-	c.proxyClient.Stop()
 
 	if c.engineClient != nil {
 		c.engineClient.Close()
