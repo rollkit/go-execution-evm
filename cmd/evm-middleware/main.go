@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 
 	evm "github.com/rollkit/go-execution-evm"
 	grpcproxy "github.com/rollkit/go-execution/proxy/grpc"
@@ -43,8 +42,7 @@ func main() {
 	var genesisHash common.Hash
 	var feeRecipient common.Address
 
-	genesis := core.DefaultGenesisBlock()
-	genesisHash = genesis.ToBlock().Hash()
+	genesisHash = common.HexToHash("0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216")
 
 	evmClient, err := evm.NewEngineAPIExecutionClient("http://:8545", "http://:8551", jwtSecret, genesisHash, feeRecipient)
 	if err != nil {
