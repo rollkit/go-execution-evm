@@ -1,4 +1,4 @@
-package mocks
+package execution_test
 
 import (
 	"encoding/json"
@@ -16,13 +16,13 @@ type MockEngineAPI struct {
 	*httptest.Server
 }
 
-type ForkchoiceState struct {
+type forkChoiceState struct {
 	HeadBlockHash      string
 	SafeBlockHash      string
 	FinalizedBlockHash string
 }
 
-var lastForkchoiceUpdate *ForkchoiceState
+var lastForkchoiceUpdate *forkChoiceState
 
 func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 	t.Helper()
@@ -50,7 +50,7 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 			params := req["params"].([]interface{})
 			forkchoiceState := params[0].(map[string]interface{})
 
-			lastForkchoiceUpdate = &ForkchoiceState{
+			lastForkchoiceUpdate = &forkChoiceState{
 				HeadBlockHash:      forkchoiceState["headBlockHash"].(string),
 				SafeBlockHash:      forkchoiceState["safeBlockHash"].(string),
 				FinalizedBlockHash: forkchoiceState["finalizedBlockHash"].(string),
@@ -92,11 +92,12 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 			}
 		}
 
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		err = json.NewEncoder(w).Encode(map[string]interface{}{
 			"jsonrpc": "2.0",
 			"id":      req["id"],
 			"result":  resp,
 		})
+		require.NoError(t, err)
 	}))
 
 	return mock
@@ -191,7 +192,7 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 			}
 		}
 
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"jsonrpc": "2.0",
 			"id":      req["id"],
 			"result":  resp,
@@ -201,6 +202,6 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 	return mock
 }
 
-func (m *MockEngineAPI) GetLastForkchoiceUpdated() *ForkchoiceState {
+func (m *MockEngineAPI) GetLastForkchoiceUpdated() *forkChoiceState {
 	return lastForkchoiceUpdate
 }
