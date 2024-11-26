@@ -106,9 +106,8 @@ func setupTestRethEngine(t *testing.T) {
 	err = cli.ContainerStart(context.Background(), rethContainer.ID, container.StartOptions{})
 	require.NoError(t, err)
 
-	// a reasonable time to wait for the container to start!
-	// do we want a more predictable elaborate code to wait for the container to be running?
-	time.Sleep(50 * time.Millisecond)
+	// TODO: check container status instead of sleeping
+	time.Sleep(5 * time.Second)
 
 	t.Cleanup(func() {
 		err = cli.ContainerStop(context.Background(), rethContainer.ID, container.StopOptions{})
