@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -31,7 +32,6 @@ import (
 const (
 	TEST_ETH_URL    = "http://localhost:8545"
 	TEST_ENGINE_URL = "http://localhost:8551"
-	JWT_SECRET      = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65" //nolint:gosec
 
 	CHAIN_ID          = "1234"
 	GENESIS_HASH      = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
@@ -39,21 +39,37 @@ const (
 	TEST_PRIVATE_KEY  = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
 	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 
-	DOCKER_CHAIN_PATH      = "./docker/chain"     // path relative to the test file
-	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" //nolint:gosec // path relative to the test file
-	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
+	DOCKER_PATH  = "./docker"
+	JWT_FILENAME = "testsecret.hex"
 )
 
-func setupTestRethEngine(t *testing.T) {
+func generateJWTSecret() (string, error) {
+	jwtSecret := make([]byte, 32)
+	_, err := rand.Read(jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+
+	return hex.EncodeToString(jwtSecret), nil
+}
+
+func setupTestRethEngine(t *testing.T) string {
 	t.Helper()
 
-	chainPath, err := filepath.Abs(DOCKER_CHAIN_PATH)
+	chainPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "chain"))
 	require.NoError(t, err)
 
-	jwtSecretPath, err := filepath.Abs(DOCKER_JWTSECRET_PATH)
+	jwtPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "jwttoken"))
 	require.NoError(t, err)
 
-	err = os.WriteFile(DOCKER_JWTSECRET_PATH+DOCKER_JWT_SECRET_FILE, []byte(JWT_SECRET), 0600)
+	err = os.MkdirAll(jwtPath, 0755)
+	require.NoError(t, err)
+
+	jwtSecret, err := generateJWTSecret()
+	require.NoError(t, err)
+
+	jwtFile := filepath.Join(jwtPath, JWT_FILENAME)
+	err = os.WriteFile(jwtFile, []byte(jwtSecret), 0600)
 	require.NoError(t, err)
 
 	cli, err := client.NewClientWithOpts()
@@ -88,7 +104,7 @@ func setupTestRethEngine(t *testing.T) {
 		&container.HostConfig{
 			Binds: []string{
 				chainPath + ":/root/chain:ro",
-				jwtSecretPath + ":/root/jwt:ro",
+				jwtPath + ":/root/jwt:ro",
 			},
 			PortBindings: nat.PortMap{
 				nat.Port("8545/tcp"): []nat.PortBinding{
@@ -111,7 +127,7 @@ func setupTestRethEngine(t *testing.T) {
 	err = cli.ContainerStart(context.Background(), rethContainer.ID, container.StartOptions{})
 	require.NoError(t, err)
 
-	err = waitForRethContainer(t)
+	err = waitForRethContainer(t, jwtSecret)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -119,13 +135,15 @@ func setupTestRethEngine(t *testing.T) {
 		require.NoError(t, err)
 		err = cli.ContainerRemove(context.Background(), rethContainer.ID, container.RemoveOptions{})
 		require.NoError(t, err)
-		err = os.Remove(DOCKER_JWTSECRET_PATH + DOCKER_JWT_SECRET_FILE)
+		err = os.Remove(jwtFile)
 		require.NoError(t, err)
 	})
+
+	return jwtSecret
 }
 
 // waitForRethContainer polls the reth endpoints until they're ready or timeout occurs
-func waitForRethContainer(t *testing.T) error {
+func waitForRethContainer(t *testing.T, jwtSecret string) error {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -153,7 +171,7 @@ func waitForRethContainer(t *testing.T) error {
 					}
 					req.Header.Set("Content-Type", "application/json")
 
-					jwtSecret, err := hex.DecodeString(strings.TrimPrefix(JWT_SECRET, "0x"))
+					jwtSecretBytes, err := hex.DecodeString(strings.TrimPrefix(jwtSecret, "0x"))
 					if err != nil {
 						return fmt.Errorf("failed to decode JWT secret: %w", err)
 					}
@@ -162,7 +180,7 @@ func waitForRethContainer(t *testing.T) error {
 						"iat": time.Now().Unix(),
 					})
 
-					signedToken, err := token.SignedString(jwtSecret)
+					signedToken, err := token.SignedString(jwtSecretBytes)
 					if err != nil {
 						return fmt.Errorf("failed to sign JWT token: %w", err)
 					}
@@ -184,7 +202,7 @@ func waitForRethContainer(t *testing.T) error {
 }
 
 func TestExecutionClientLifecycle(t *testing.T) {
-	setupTestRethEngine(t)
+	jwtSecret := setupTestRethEngine(t)
 
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
@@ -199,7 +217,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
-		JWT_SECRET,
+		jwtSecret,
 		genesisHash,
 		common.Address{},
 	)
@@ -270,7 +288,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 }
 
 func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
-	setupTestRethEngine(t)
+	jwtSecret := setupTestRethEngine(t)
 
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
@@ -280,7 +298,7 @@ func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
-		JWT_SECRET,
+		jwtSecret,
 		genesisHash,
 		common.Address{},
 	)
