@@ -2,12 +2,17 @@ package execution
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -106,8 +111,8 @@ func setupTestRethEngine(t *testing.T) {
 	err = cli.ContainerStart(context.Background(), rethContainer.ID, container.StartOptions{})
 	require.NoError(t, err)
 
-	// TODO: check container status instead of sleeping
-	time.Sleep(5 * time.Second)
+	err = waitForRethContainer(t)
+	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		err = cli.ContainerStop(context.Background(), rethContainer.ID, container.StopOptions{})
@@ -117,6 +122,65 @@ func setupTestRethEngine(t *testing.T) {
 		err = os.Remove(DOCKER_JWTSECRET_PATH + DOCKER_JWT_SECRET_FILE)
 		require.NoError(t, err)
 	})
+}
+
+// waitForRethContainer polls the reth endpoints until they're ready or timeout occurs
+func waitForRethContainer(t *testing.T) error {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client := &http.Client{
+		Timeout: 1 * time.Second,
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for reth container to be ready")
+		default:
+			// check :8545 is ready
+			rpcReq := strings.NewReader(`{"jsonrpc":"2.0","method":"net_version","params":[],"id":1}`)
+			resp, err := client.Post(TEST_ETH_URL, "application/json", rpcReq)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					// check :8551 is ready
+					req, err := http.NewRequest("POST", TEST_ENGINE_URL, strings.NewReader(`{"jsonrpc":"2.0","method":"engine_exchangeTransitionConfigurationV1","params":[],"id":1}`))
+					if err != nil {
+						return err
+					}
+					req.Header.Set("Content-Type", "application/json")
+
+					jwtSecret, err := hex.DecodeString(strings.TrimPrefix(JWT_SECRET, "0x"))
+					if err != nil {
+						return fmt.Errorf("failed to decode JWT secret: %w", err)
+					}
+
+					token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+						"iat": time.Now().Unix(),
+					})
+
+					signedToken, err := token.SignedString(jwtSecret)
+					if err != nil {
+						return fmt.Errorf("failed to sign JWT token: %w", err)
+					}
+
+					req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", signedToken))
+
+					resp, err := client.Do(req)
+					if err == nil {
+						resp.Body.Close()
+						if resp.StatusCode == http.StatusOK {
+							return nil // Both endpoints are ready
+						}
+					}
+				}
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
 }
 
 func TestExecutionClientLifecycle(t *testing.T) {
