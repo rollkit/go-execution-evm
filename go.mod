@@ -12,10 +12,8 @@ require (
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
-	github.com/VictoriaMetrics/fastcache v1.12.2 // indirect
 	github.com/bits-and-blooms/bitset v1.15.0 // indirect
 	github.com/celestiaorg/go-header v0.6.3 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/consensys/bavard v0.1.22 // indirect
 	github.com/consensys/gnark-crypto v0.14.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -40,7 +38,6 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/holiman/bloomfilter/v2 v2.0.3 // indirect
 	github.com/holiman/uint256 v1.3.1 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
