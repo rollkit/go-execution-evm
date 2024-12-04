@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -58,23 +59,10 @@ func NewEngineAPIExecutionClient(
 		return nil, err
 	}
 
-	authToken := ""
-	if jwtSecret != "" {
-		secret, err := hex.DecodeString(jwtSecret)
-		if err != nil {
-			return nil, err
-		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"exp": time.Now().Add(time.Hour * 1).Unix(), // Expires in 1 hour
-			"iat": time.Now().Unix(),
-		})
-
-		// Sign the token with the decoded secret
-		authToken, err = token.SignedString(secret)
-		if err != nil {
-			return nil, err
-		}
+	authToken, err := getAuthToken(jwtSecret)
+	if err != nil {
+		ethClient.Close()
+		return nil, err
 	}
 
 	engineClient, err := rpc.DialOptions(context.Background(), engineURL,
@@ -293,4 +281,27 @@ func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) 
 // derivePrevRandao generates a deterministic prevRandao value based on block height
 func (c *EngineAPIExecutionClient) derivePrevRandao(blockHeight uint64) common.Hash {
 	return common.BigToHash(big.NewInt(int64(blockHeight))) //nolint:gosec // disable G115
+}
+
+// Add this function to execution.go
+func getAuthToken(jwtSecret string) (string, error) {
+	if jwtSecret == "" {
+		return "", nil
+	}
+	secret, err := hex.DecodeString(strings.TrimPrefix(jwtSecret, "0x"))
+	if err != nil {
+		return "", fmt.Errorf("failed to decode JWT secret: %w", err)
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"exp": time.Now().Add(time.Hour * 1).Unix(), // Expires in 1 hour
+		"iat": time.Now().Unix(),
+	})
+
+	// Sign the token with the decoded secret
+	authToken, err := token.SignedString(secret)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign JWT token: %w", err)
+	}
+	return authToken, nil
 }
