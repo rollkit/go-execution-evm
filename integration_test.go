@@ -61,7 +61,7 @@ func setupTestRethEngine(t *testing.T) string {
 	jwtPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "jwttoken"))
 	require.NoError(t, err)
 
-	err = os.MkdirAll(jwtPath, 0755)
+	err = os.MkdirAll(jwtPath, 0750)
 	require.NoError(t, err)
 
 	jwtSecret, err := generateJWTSecret()
@@ -169,7 +169,9 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 			rpcReq := strings.NewReader(`{"jsonrpc":"2.0","method":"net_version","params":[],"id":1}`)
 			resp, err := client.Post(TEST_ETH_URL, "application/json", rpcReq)
 			if err == nil {
-				resp.Body.Close()
+				if err := resp.Body.Close(); err != nil {
+					return fmt.Errorf("failed to close response body: %w", err)
+				}
 				if resp.StatusCode == http.StatusOK {
 					// check :8551 is ready with a stateless call
 					req, err := http.NewRequest("POST", TEST_ENGINE_URL, strings.NewReader(`{"jsonrpc":"2.0","method":"engine_getClientVersionV1","params":[],"id":1}`))
@@ -187,9 +189,11 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 
 					resp, err := client.Do(req)
 					if err == nil {
-						resp.Body.Close()
+						if err := resp.Body.Close(); err != nil {
+							return fmt.Errorf("failed to close response body: %w", err)
+						}
 						if resp.StatusCode == http.StatusOK {
-							return nil // Both endpoints are ready
+							return nil
 						}
 					}
 				}
