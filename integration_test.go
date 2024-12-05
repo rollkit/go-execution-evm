@@ -2,9 +2,14 @@ package execution
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +31,6 @@ import (
 const (
 	TEST_ETH_URL    = "http://localhost:8545"
 	TEST_ENGINE_URL = "http://localhost:8551"
-	JWT_SECRET      = "09a23c010d96caaebb21c193b85d30bbb62a9bac5bd0a684e9e91c77c811ca65" //nolint:gosec
 
 	CHAIN_ID          = "1234"
 	GENESIS_HASH      = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
@@ -34,25 +38,51 @@ const (
 	TEST_PRIVATE_KEY  = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
 	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 
-	DOCKER_CHAIN_PATH      = "./docker/chain"     // path relative to the test file
-	DOCKER_JWTSECRET_PATH  = "./docker/jwttoken/" //nolint:gosec // path relative to the test file
-	DOCKER_JWT_SECRET_FILE = "testsecret.hex"
+	DOCKER_PATH  = "./docker"
+	JWT_FILENAME = "testsecret.hex"
 )
 
-func setupTestRethEngine(t *testing.T) {
+func generateJWTSecret() (string, error) {
+	jwtSecret := make([]byte, 32)
+	_, err := rand.Read(jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+
+	return hex.EncodeToString(jwtSecret), nil
+}
+
+func setupTestRethEngine(t *testing.T) string {
 	t.Helper()
 
-	chainPath, err := filepath.Abs(DOCKER_CHAIN_PATH)
+	chainPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "chain"))
 	require.NoError(t, err)
 
-	jwtSecretPath, err := filepath.Abs(DOCKER_JWTSECRET_PATH)
+	jwtPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "jwttoken"))
 	require.NoError(t, err)
 
-	err = os.WriteFile(DOCKER_JWTSECRET_PATH+DOCKER_JWT_SECRET_FILE, []byte(JWT_SECRET), 0600)
+	err = os.MkdirAll(jwtPath, 0750)
 	require.NoError(t, err)
+
+	jwtSecret, err := generateJWTSecret()
+	require.NoError(t, err)
+
+	jwtFile := filepath.Join(jwtPath, JWT_FILENAME)
+	err = os.WriteFile(jwtFile, []byte(jwtSecret), 0600)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		err := os.Remove(jwtFile)
+		require.NoError(t, err)
+	})
 
 	cli, err := client.NewClientWithOpts()
 	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		err := cli.Close()
+		require.NoError(t, err)
+	})
 
 	rethContainer, err := cli.ContainerCreate(context.Background(),
 		&container.Config{
@@ -83,7 +113,7 @@ func setupTestRethEngine(t *testing.T) {
 		&container.HostConfig{
 			Binds: []string{
 				chainPath + ":/root/chain:ro",
-				jwtSecretPath + ":/root/jwt:ro",
+				jwtPath + ":/root/jwt:ro",
 			},
 			PortBindings: nat.PortMap{
 				nat.Port("8545/tcp"): []nat.PortBinding{
@@ -103,24 +133,78 @@ func setupTestRethEngine(t *testing.T) {
 		nil, nil, "reth")
 	require.NoError(t, err)
 
-	err = cli.ContainerStart(context.Background(), rethContainer.ID, container.StartOptions{})
-	require.NoError(t, err)
-
-	// TODO: check container status instead of sleeping
-	time.Sleep(5 * time.Second)
-
 	t.Cleanup(func() {
-		err = cli.ContainerStop(context.Background(), rethContainer.ID, container.StopOptions{})
+		err := cli.ContainerStop(context.Background(), rethContainer.ID, container.StopOptions{})
 		require.NoError(t, err)
 		err = cli.ContainerRemove(context.Background(), rethContainer.ID, container.RemoveOptions{})
 		require.NoError(t, err)
-		err = os.Remove(DOCKER_JWTSECRET_PATH + DOCKER_JWT_SECRET_FILE)
-		require.NoError(t, err)
 	})
+
+	err = cli.ContainerStart(context.Background(), rethContainer.ID, container.StartOptions{})
+	require.NoError(t, err)
+
+	err = waitForRethContainer(t, jwtSecret)
+	require.NoError(t, err)
+
+	return jwtSecret
+}
+
+// waitForRethContainer polls the reth endpoints until they're ready or timeout occurs
+func waitForRethContainer(t *testing.T, jwtSecret string) error {
+	t.Helper()
+
+	client := &http.Client{
+		Timeout: 100 * time.Millisecond,
+	}
+
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			return fmt.Errorf("timeout waiting for reth container to be ready")
+		default:
+			// check :8545 is ready
+			rpcReq := strings.NewReader(`{"jsonrpc":"2.0","method":"net_version","params":[],"id":1}`)
+			resp, err := client.Post(TEST_ETH_URL, "application/json", rpcReq)
+			if err == nil {
+				if err := resp.Body.Close(); err != nil {
+					return fmt.Errorf("failed to close response body: %w", err)
+				}
+				if resp.StatusCode == http.StatusOK {
+					// check :8551 is ready with a stateless call
+					req, err := http.NewRequest("POST", TEST_ENGINE_URL, strings.NewReader(`{"jsonrpc":"2.0","method":"engine_getClientVersionV1","params":[],"id":1}`))
+					if err != nil {
+						return err
+					}
+					req.Header.Set("Content-Type", "application/json")
+
+					authToken, err := getAuthToken(jwtSecret)
+					if err != nil {
+						return err
+					}
+
+					req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
+
+					resp, err := client.Do(req)
+					if err == nil {
+						if err := resp.Body.Close(); err != nil {
+							return fmt.Errorf("failed to close response body: %w", err)
+						}
+						if resp.StatusCode == http.StatusOK {
+							return nil
+						}
+					}
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }
 
 func TestExecutionClientLifecycle(t *testing.T) {
-	setupTestRethEngine(t)
+	jwtSecret := setupTestRethEngine(t)
 
 	initialHeight := uint64(0)
 	genesisHash := common.HexToHash(GENESIS_HASH)
@@ -135,20 +219,27 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		&proxy_json_rpc.Config{},
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
-		JWT_SECRET,
+		jwtSecret,
 		genesisHash,
 		common.Address{},
 	)
 	require.NoError(t, err)
 
-	// sub tests are only functional grouping.
-	t.Run("InitChain", func(t *testing.T) {
+	require.True(t, t.Run("InitChain", func(t *testing.T) {
 		stateRoot, gasLimit, err := executionClient.InitChain(context.Background(), genesisTime, initialHeight, CHAIN_ID)
 		require.NoError(t, err)
 
 		require.Equal(t, rollkitGenesisStateRoot, stateRoot)
 		require.Equal(t, uint64(1000000), gasLimit)
-	})
+	}))
+
+	require.True(t, t.Run("InitChain_InvalidPayloadTimestamp", func(t *testing.T) {
+		blockTime := time.Date(2024, 3, 13, 13, 54, 0, 0, time.UTC) // pre-cancun timestamp not supported
+		_, _, err := executionClient.InitChain(context.Background(), blockTime, initialHeight, CHAIN_ID)
+		// payload timestamp is not within the cancun timestamp
+		require.Error(t, err)
+		require.ErrorContains(t, err, "Unsupported fork")
+	}))
 
 	privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
 	require.NoError(t, err)
@@ -170,7 +261,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	err = rpcClient.SendTransaction(context.Background(), signedTx)
 	require.NoError(t, err)
 
-	t.Run("GetTxs", func(t *testing.T) {
+	require.True(t, t.Run("GetTxs", func(t *testing.T) {
 		txs, err := executionClient.GetTxs(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, 1, len(txs))
@@ -187,7 +278,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		assert.Equal(t, rSignedTx, r)
 		assert.Equal(t, sSignedTx, s)
 		assert.Equal(t, vSignedTx, v)
-	})
+	}))
 
 	txBytes, err := signedTx.MarshalBinary()
 	require.NoError(t, err)
@@ -195,35 +286,12 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	blockHeight := uint64(1)
 	blockTime := genesisTime.Add(10 * time.Second)
 
-	t.Run("ExecuteTxs", func(t *testing.T) {
+	require.True(t, t.Run("ExecuteTxs", func(t *testing.T) {
 		newStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
 
 		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, blockHeight, blockTime, rollkitGenesisStateRoot)
 		require.NoError(t, err)
 		assert.Greater(t, gasLimit, gasUsed)
 		assert.Equal(t, rollkit_types.Hash(newStateroot[:]), stateroot)
-	})
-}
-
-func TestExecutionClient_InitChain_InvalidPayloadTimestamp(t *testing.T) {
-	setupTestRethEngine(t)
-
-	initialHeight := uint64(0)
-	genesisHash := common.HexToHash(GENESIS_HASH)
-	blockTime := time.Date(2024, 3, 13, 13, 54, 0, 0, time.UTC) // pre-cancun timestamp not supported
-
-	executionClient, err := NewEngineAPIExecutionClient(
-		&proxy_json_rpc.Config{},
-		TEST_ETH_URL,
-		TEST_ENGINE_URL,
-		JWT_SECRET,
-		genesisHash,
-		common.Address{},
-	)
-	require.NoError(t, err)
-
-	_, _, err = executionClient.InitChain(context.Background(), blockTime, initialHeight, CHAIN_ID)
-	// payload timestamp is not within the cancun timestamp
-	require.Error(t, err)
-	require.ErrorContains(t, err, "Unsupported fork")
+	}))
 }
