@@ -19,8 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/rollkit/go-execution"
-	proxy_json_rpc "github.com/rollkit/go-execution/proxy/jsonrpc"
+	execution "github.com/rollkit/go-execution"
 	execution_types "github.com/rollkit/go-execution/types"
 )
 
@@ -44,16 +43,12 @@ type EngineAPIExecutionClient struct {
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
 func NewEngineAPIExecutionClient(
-	proxyConfig *proxy_json_rpc.Config,
 	ethURL,
 	engineURL string,
 	jwtSecret string,
 	genesisHash common.Hash,
 	feeRecipient common.Address,
 ) (*EngineAPIExecutionClient, error) {
-	proxyClient := proxy_json_rpc.NewClient()
-	proxyClient.SetConfig(proxyConfig)
-
 	ethClient, err := ethclient.Dial(ethURL)
 	if err != nil {
 		return nil, err
