@@ -36,10 +36,11 @@ var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
 
 // EngineAPIExecutionClient implements the execution.Execute interface
 type EngineAPIExecutionClient struct {
-	engineClient *rpc.Client // engine api
-	ethClient    *ethclient.Client
-	genesisHash  common.Hash
-	feeRecipient common.Address
+	engineClient  *rpc.Client // engine api
+	ethClient     *ethclient.Client
+	genesisHash   common.Hash
+	feeRecipient  common.Address
+	lastBlockHash common.Hash // tracks the last block's hash
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
@@ -78,10 +79,11 @@ func NewEngineAPIExecutionClient(
 	}
 
 	return &EngineAPIExecutionClient{
-		engineClient: engineClient,
-		ethClient:    ethClient,
-		genesisHash:  genesisHash,
-		feeRecipient: feeRecipient,
+		engineClient:  engineClient,
+		ethClient:     ethClient,
+		genesisHash:   genesisHash,
+		feeRecipient:  feeRecipient,
+		lastBlockHash: genesisHash, // start with genesis hash
 	}, nil
 }
 
@@ -204,9 +206,9 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
-			HeadBlockHash:      c.genesisHash,
-			SafeBlockHash:      c.genesisHash,
-			FinalizedBlockHash: c.genesisHash,
+			HeadBlockHash:      c.lastBlockHash,
+			SafeBlockHash:      c.lastBlockHash,
+			FinalizedBlockHash: c.lastBlockHash,
 		},
 		&engine.PayloadAttributes{
 			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115
@@ -245,6 +247,8 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	if newPayloadResult.Status != engine.VALID {
 		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
 	}
+
+	c.lastBlockHash = payloadResult.ExecutionPayload.BlockHash
 
 	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasUsed, nil
 }
