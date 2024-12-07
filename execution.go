@@ -105,6 +105,38 @@ func (c *EngineAPIExecutionClient) Stop() {
 
 // InitChain initializes the blockchain with genesis information
 func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
+	// For height 1, we need both the genesis state root and to prepare block 1
+	if initialHeight == 1 {
+		// Get genesis state root
+		header, err := c.ethClient.HeaderByNumber(ctx, big.NewInt(0))
+		if err != nil {
+			return execution_types.Hash{}, 0, fmt.Errorf("failed to get genesis block: %w", err)
+		}
+
+		// Now prepare block 1 by setting forkchoice to genesis
+		genesisHash := header.Hash()
+		var forkchoiceResult engine.ForkChoiceResponse
+		err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+			engine.ForkchoiceStateV1{
+				HeadBlockHash:      genesisHash,
+				SafeBlockHash:      genesisHash,
+				FinalizedBlockHash: genesisHash,
+			},
+			engine.PayloadAttributes{
+				Timestamp:             uint64(genesisTime.Unix()),
+				Random:                common.Hash{},
+				SuggestedFeeRecipient: c.feeRecipient,
+				BeaconRoot:            &genesisHash,
+				Withdrawals:           []*types.Withdrawal{},
+			},
+		)
+		if err != nil {
+			return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
+		}
+
+		return execution_types.Hash(header.Root[:]), uint64(1000000), nil
+	}
+
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
@@ -113,7 +145,7 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			FinalizedBlockHash: c.genesisHash,
 		},
 		engine.PayloadAttributes{
-			Timestamp:             uint64(genesisTime.Unix()), //nolint:gosec // disable G115
+			Timestamp:             uint64(genesisTime.Unix()),
 			Random:                common.Hash{},
 			SuggestedFeeRecipient: c.feeRecipient,
 			BeaconRoot:            &c.genesisHash,
@@ -132,6 +164,21 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
+	}
+
+	// submit payload
+	var newPayloadResult engine.PayloadStatusV1
+	err = c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
+		payloadResult.ExecutionPayload,
+		[]string{}, // no blob hashes
+		c.genesisHash.Hex(),
+	)
+	if err != nil {
+		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed: %w", err)
+	}
+
+	if newPayloadResult.Status != engine.VALID {
+		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
 	}
 
 	stateRoot := payloadResult.ExecutionPayload.StateRoot
