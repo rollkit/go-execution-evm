@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -238,15 +237,14 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		}
 	}
 
-	// encode
-	txsPayload := make([][]byte, len(txs))
-	for i, tx := range ethTxs {
-		buf := bytes.Buffer{}
-		err := tx.EncodeRLP(&buf)
+	for _, tx := range ethTxs {
+		err := c.ethClient.SendTransaction(ctx, tx)
 		if err != nil {
-			return execution_types.Hash{}, 0, fmt.Errorf("failed to RLP encode tx: %w", err)
+			// ignore "already known" errors as they're not actual failures
+			if !strings.Contains(err.Error(), "already known") {
+				return execution_types.Hash{}, 0, fmt.Errorf("failed to send transaction: %w", err)
+			}
 		}
-		txsPayload[i] = buf.Bytes()
 	}
 
 	// update forkchoice
