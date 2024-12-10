@@ -112,6 +112,10 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			return execution_types.Hash{}, 0, fmt.Errorf("failed to get genesis block: %w", err)
 		}
 
+		if height := header.Number.Uint64(); height != 0 {
+			return execution_types.Hash{}, 0, fmt.Errorf("expected genesis block (height 0), got height %d", height)
+		}
+
 		// Now prepare block 1 by setting forkchoice to genesis
 		genesisHash := header.Hash()
 		var forkchoiceResult engine.ForkChoiceResponse
