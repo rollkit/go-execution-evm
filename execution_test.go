@@ -3,11 +3,7 @@ package execution_test
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
-	"io"
 	"math/big"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -137,49 +133,49 @@ func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	mockEth.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var resp interface{}
-
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-
-		var req map[string]interface{}
-		err = json.Unmarshal(body, &req)
-		require.NoError(t, err)
-
-		method := req["method"].(string)
-		if method == "txpool_content" {
-			resp = map[string]interface{}{
-				"pending": map[string]interface{}{
-					"0x1234567890123456789012345678901234567890": map[string]interface{}{
-						"0": map[string]interface{}{
-							"input":    "0x123456",
-							"nonce":    "0x0",
-							"from":     "0x1234567890123456789012345678901234567890",
-							"to":       "0x0987654321098765432109876543210987654321",
-							"value":    "0x0",
-							"gas":      "0x5208",
-							"gasPrice": "0x3b9aca00",
-							"chainId":  "0x1",
-							"v":        "0x1b",
-							"r":        "0x1234",
-							"s":        "0x5678",
-							"hash":     "0x1234567890123456789012345678901234567890123456789012345678901234",
-							"type":     "0x0",
-						},
-					},
-				},
-				"queued": map[string]interface{}{},
-			}
-		}
-
-		err = json.NewEncoder(w).Encode(map[string]interface{}{
-			"jsonrpc": "2.0",
-			"id":      req["id"],
-			"result":  resp,
-		})
-		require.NoError(t, err)
-	}))
+	//mockEth.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	//	var resp interface{}
+	//
+	//	body, err := io.ReadAll(r.Body)
+	//	require.NoError(t, err)
+	//
+	//	var req map[string]interface{}
+	//	err = json.Unmarshal(body, &req)
+	//	require.NoError(t, err)
+	//
+	//	method := req["method"].(string)
+	//	if method == "txpool_content" {
+	//		resp = map[string]interface{}{
+	//			"pending": map[string]interface{}{
+	//				"0x1234567890123456789012345678901234567890": map[string]interface{}{
+	//					"0": map[string]interface{}{
+	//						"input":    "0x123456",
+	//						"nonce":    "0x0",
+	//						"from":     "0x1234567890123456789012345678901234567890",
+	//						"to":       "0x0987654321098765432109876543210987654321",
+	//						"value":    "0x0",
+	//						"gas":      "0x5208",
+	//						"gasPrice": "0x3b9aca00",
+	//						"chainId":  "0x1",
+	//						"v":        "0x1b",
+	//						"r":        "0x1234",
+	//						"s":        "0x5678",
+	//						"hash":     "0x1234567890123456789012345678901234567890123456789012345678901234",
+	//						"type":     "0x0",
+	//					},
+	//				},
+	//			},
+	//			"queued": map[string]interface{}{},
+	//		}
+	//	}
+	//
+	//	err = json.NewEncoder(w).Encode(map[string]interface{}{
+	//		"jsonrpc": "2.0",
+	//		"id":      req["id"],
+	//		"result":  resp,
+	//	})
+	//	require.NoError(t, err)
+	//}))
 
 	ctx := context.Background()
 	txs, err := client.GetTxs(ctx)
