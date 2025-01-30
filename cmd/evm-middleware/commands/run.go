@@ -71,8 +71,12 @@ var runCmd = &cobra.Command{
 
 		go func() {
 			log.Println("Serving go-execution API...")
-			if err := s.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-				log.Fatalf("Server exited with error: %v\n", err)
+			if err := s.Serve(listener); err != nil {
+				if !errors.Is(err, grpc.ErrServerStopped) {
+					log.Printf("Server exited with error: %v\n", err)
+				}
+				// Trigger graceful shutdown
+				s.GracefulStop()
 			}
 			wg.Done()
 		}()
