@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
@@ -32,8 +33,8 @@ func init() {
 	}
 	runCmd.Flags().StringVar(&listenAddress, "listen-address", "0.0.0.0:40041", "Address to listen for gRPC connections")
 	runCmd.Flags().StringVar(&genesisHashHex, "genesis-hash", "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216", "Genesis hash of the EVM chain")
-	runCmd.Flags().StringVar(&ethURL, "eth-url", "http://:8545", "URL of the ETH API exposed by EVM node")
-	runCmd.Flags().StringVar(&engineURL, "engine-url", "http://:8551", "URL of the Engine API exposed by EVM node")
+	runCmd.Flags().StringVar(&ethURL, "eth-url", "http://127.0.0.1:8545", "URL of the ETH API exposed by EVM node")
+	runCmd.Flags().StringVar(&engineURL, "engine-url", "http://127.0.0.1:8551", "URL of the Engine API exposed by EVM node")
 
 	// Attach the `runCmd` to the root command
 	rootCmd.AddCommand(runCmd)
@@ -43,6 +44,12 @@ var runCmd = &cobra.Command{
 	Use:     "run",
 	Aliases: []string{"start", "node"},
 	Short:   "Run the EVM middleware for Rollkit",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := hexutil.Decode(genesisHashHex); err != nil {
+			return fmt.Errorf("invalid genesis hash format: %s, error: %w", genesisHashHex, err)
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		listener, err := net.Listen("tcp", listenAddress)
 		if err != nil {

@@ -7,10 +7,6 @@ var rootCmd = &cobra.Command{
 	Short: "EVM middleware for Rollkit",
 }
 
-func init() {
-	rootCmd.AddCommand(runCmd)
-}
-
 // Execute executes the root command.
 func Execute() error {
 	return rootCmd.Execute()
