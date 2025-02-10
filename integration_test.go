@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
-	"github.com/docker/go-connections/nat"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -76,20 +76,12 @@ func setupTestRethEngine(t *testing.T) string {
 		require.NoError(t, err)
 	})
 
-	cli, err := client.NewClientWithOpts()
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		err := cli.Close()
-		require.NoError(t, err)
-	})
-
-	rethContainer, err := cli.ContainerCreate(context.Background(),
-		&container.Config{
-			Image:      "ghcr.io/paradigmxyz/reth:v1.1.1",
-			Entrypoint: []string{"/bin/sh", "-c"},
-			Cmd: []string{
-				`
+	rethReq := testcontainers.ContainerRequest{
+		Name:       "reth",
+		Image:      "ghcr.io/paradigmxyz/reth:v1.1.1",
+		Entrypoint: []string{"/bin/sh", "-c"},
+		Cmd: []string{
+			`
 				reth init --chain /root/chain/genesis.json && \
           		reth node \
           		--chain /root/chain/genesis.json \
@@ -104,44 +96,39 @@ func setupTestRethEngine(t *testing.T) string {
           		--debug.tip 0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216 \
           		-vvvv
 				`,
-			},
-			ExposedPorts: map[nat.Port]struct{}{
-				nat.Port("8545/tcp"): {},
-				nat.Port("8551/tcp"): {},
-			},
 		},
-		&container.HostConfig{
-			Binds: []string{
+		ExposedPorts: []string{"8545/tcp", "8551/tcp"},
+		HostConfigModifier: func(hc *container.HostConfig) {
+			hc.Binds = []string{
 				chainPath + ":/root/chain:ro",
 				jwtPath + ":/root/jwt:ro",
-			},
-			PortBindings: nat.PortMap{
-				nat.Port("8545/tcp"): []nat.PortBinding{
+			}
+			hc.PortBindings = nat.PortMap{
+				"8545/tcp": []nat.PortBinding{
 					{
 						HostIP:   "0.0.0.0",
 						HostPort: "8545",
 					},
 				},
-				nat.Port("8551/tcp"): []nat.PortBinding{
+				"8551/tcp": []nat.PortBinding{
 					{
 						HostIP:   "0.0.0.0",
 						HostPort: "8551",
 					},
 				},
-			},
+			}
 		},
-		nil, nil, "reth")
+	}
+	ctx := context.Background()
+	rethContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: rethReq,
+		Started:          true,
+	})
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		err := cli.ContainerStop(context.Background(), rethContainer.ID, container.StopOptions{})
-		require.NoError(t, err)
-		err = cli.ContainerRemove(context.Background(), rethContainer.ID, container.RemoveOptions{})
-		require.NoError(t, err)
+		testcontainers.CleanupContainer(t, rethContainer)
 	})
-
-	err = cli.ContainerStart(context.Background(), rethContainer.ID, container.StartOptions{})
-	require.NoError(t, err)
 
 	err = waitForRethContainer(t, jwtSecret)
 	require.NoError(t, err)
