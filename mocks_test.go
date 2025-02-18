@@ -194,8 +194,7 @@ func NewMockEthAPI(t *testing.T) *MockEthAPI {
 
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"jsonrpc": "2.0",
-			"id":      req["id"],
-			"result":  resp,
+			"id":      req["id"], "result": resp,
 		})
 	}))
 
