@@ -189,9 +189,9 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 func (c *EngineAPIExecutionClient) getBlockHash(ctx context.Context, height uint64) (common.Hash, error) {
 	var block map[string]interface{}
 	err := c.engineClient.CallContext(
-		ctx, &block, "eth_getBlockByNumber", rpc.BlockNumber(height), false)
+		ctx, &block, "eth_getBlockByNumber", rpc.BlockNumber(height), false) //nolint:gosec // disable G115
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get block at height %d: %w", height-1, err)
+		return common.Hash{}, fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
 	// Extract the block hash
 	blockHashStr, ok := block["hash"].(string)
@@ -225,9 +225,15 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	}
 
 	// fetch previous block hash to update forkchoice for the next payload id
-	prevBlockHash, err := c.getBlockHash(ctx, height-1)
-	if err != nil {
-		return execution_types.Hash{}, 0, err
+	var err error
+	var prevBlockHash common.Hash
+	if height == 1 {
+		prevBlockHash = c.genesisHash
+	} else {
+		prevBlockHash, err = c.getBlockHash(ctx, height-1)
+		if err != nil {
+			return execution_types.Hash{}, 0, err
+		}
 	}
 
 	// update forkchoice to get the next payload id
