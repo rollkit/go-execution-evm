@@ -166,7 +166,12 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 					}
 					req.Header.Set("Content-Type", "application/json")
 
-					authToken, err := getAuthToken(jwtSecret)
+					secret, err := decodeSecret(jwtSecret)
+					if err != nil {
+						return err
+					}
+
+					authToken, err := getAuthToken(secret)
 					if err != nil {
 						return err
 					}

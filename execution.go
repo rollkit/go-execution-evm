@@ -54,14 +54,18 @@ func NewEngineAPIExecutionClient(
 		return nil, err
 	}
 
-	authToken, err := getAuthToken(jwtSecret)
+	secret, err := decodeSecret(jwtSecret)
 	if err != nil {
-		ethClient.Close()
 		return nil, err
 	}
 
 	engineClient, err := rpc.DialOptions(context.Background(), engineURL,
 		rpc.WithHTTPAuth(func(h http.Header) error {
+			authToken, err := getAuthToken(secret)
+			if err != nil {
+				return err
+			}
+
 			if authToken != "" {
 				h.Set("Authorization", "Bearer "+authToken)
 			}
@@ -323,23 +327,22 @@ func (c *EngineAPIExecutionClient) derivePrevRandao(blockHeight uint64) common.H
 	return common.BigToHash(big.NewInt(int64(blockHeight))) //nolint:gosec // disable G115
 }
 
-// Add this function to execution.go
-func getAuthToken(jwtSecret string) (string, error) {
-	if jwtSecret == "" {
-		return "", nil
-	}
+func decodeSecret(jwtSecret string) ([]byte, error) {
 	secret, err := hex.DecodeString(strings.TrimPrefix(jwtSecret, "0x"))
 	if err != nil {
-		return "", fmt.Errorf("failed to decode JWT secret: %w", err)
+		return nil, fmt.Errorf("failed to decode JWT secret: %w", err)
 	}
+	return secret, nil
+}
 
+func getAuthToken(jwtSecret []byte) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"exp": time.Now().Add(time.Hour * 1).Unix(), // Expires in 1 hour
 		"iat": time.Now().Unix(),
 	})
 
 	// Sign the token with the decoded secret
-	authToken, err := token.SignedString(secret)
+	authToken, err := token.SignedString(jwtSecret)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign JWT token: %w", err)
 	}
