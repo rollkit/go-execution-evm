@@ -68,11 +68,24 @@ Run RETH in docker:
 ```bash
 cd docker
 docker compose up -d
-docker compose down
 ```
 
 Compile `evm-middleware` binary:
 
 ```bash
 make build
+```
+
+Run `evm-middleware` binary:
+
+```bash
+./build/evm-middleware run --jwt-secret $(cat docker/jwttoken/jwt.hex)
+```
+
+Compile rollkit from `feature/exec_api` branch and run it:
+
+```bash
+git checkout feature/exec_api
+go build ./cmd/rollkit
+./rollkit start
 ```
