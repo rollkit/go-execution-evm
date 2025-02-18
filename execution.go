@@ -35,10 +35,11 @@ var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
 
 // EngineAPIExecutionClient implements the execution.Execute interface
 type EngineAPIExecutionClient struct {
-	engineClient *rpc.Client // engine api
-	ethClient    *ethclient.Client
-	genesisHash  common.Hash
-	feeRecipient common.Address
+	engineClient  *rpc.Client // engine api
+	ethClient     *ethclient.Client
+	genesisHash   common.Hash
+	initialHeight uint64
+	feeRecipient  common.Address
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
@@ -77,10 +78,11 @@ func NewEngineAPIExecutionClient(
 	}
 
 	return &EngineAPIExecutionClient{
-		engineClient: engineClient,
-		ethClient:    ethClient,
-		genesisHash:  genesisHash,
-		feeRecipient: feeRecipient,
+		engineClient:  engineClient,
+		ethClient:     ethClient,
+		genesisHash:   genesisHash,
+		initialHeight: 1, // set to 1 and updated in InitChain
+		feeRecipient:  feeRecipient,
 	}, nil
 }
 
@@ -145,6 +147,8 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 	rollkitStateRoot := execution_types.Hash(stateRoot[:])
 
 	gasLimit := payloadResult.ExecutionPayload.GasLimit
+
+	c.initialHeight = initialHeight
 
 	return rollkitStateRoot, gasLimit, nil
 }
@@ -227,7 +231,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	// fetch previous block hash to update forkchoice for the next payload id
 	var err error
 	var prevBlockHash common.Hash
-	if height == 1 {
+	if height == c.initialHeight {
 		prevBlockHash = c.genesisHash
 	} else {
 		prevBlockHash, err = c.getBlockHash(ctx, height-1)
