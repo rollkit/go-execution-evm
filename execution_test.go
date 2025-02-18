@@ -77,7 +77,7 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 
 	jwtSecret := generateTestJWTSecret()
 	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
-
+	updatedStateRoot := execution_types.Hash(common.Hex2Bytes("0000000000000000000000000000000000000000000000000000000000000000"))
 	client, err := execution.NewEngineAPIExecutionClient(
 		mockEth.URL,
 		mockEngine.URL,
@@ -106,9 +106,9 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 
 	lastCall := mockEngine.GetLastForkchoiceUpdated()
 	require.NotNil(t, lastCall)
-	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.HeadBlockHash)
-	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.SafeBlockHash)
-	require.Equal(t, common.BytesToHash(prevStateRoot[:]).Hex(), lastCall.FinalizedBlockHash)
+	require.Equal(t, common.BytesToHash(updatedStateRoot[:]).Hex(), lastCall.HeadBlockHash)
+	require.Equal(t, common.BytesToHash(updatedStateRoot[:]).Hex(), lastCall.SafeBlockHash)
+	require.Equal(t, common.BytesToHash(updatedStateRoot[:]).Hex(), lastCall.FinalizedBlockHash)
 
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
