@@ -35,11 +35,10 @@ var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
 
 // EngineAPIExecutionClient implements the execution.Execute interface
 type EngineAPIExecutionClient struct {
-	engineClient  *rpc.Client // engine api
-	ethClient     *ethclient.Client
-	genesisHash   common.Hash
-	feeRecipient  common.Address
-	prevBlockHash common.Hash
+	engineClient *rpc.Client // engine api
+	ethClient    *ethclient.Client
+	genesisHash  common.Hash
+	feeRecipient common.Address
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
@@ -137,8 +136,6 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 	if err != nil {
 		return execution_types.Hash{}, 0, err
 	}
-	// Set the genesis block as the previous block hash
-	c.prevBlockHash = c.genesisHash
 
 	stateRoot := payloadResult.ExecutionPayload.StateRoot
 	rollkitStateRoot := execution_types.Hash(stateRoot[:])
@@ -185,6 +182,21 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 	return txs, nil
 }
 
+func (c *EngineAPIExecutionClient) getBlockHash(ctx context.Context, height uint64) (common.Hash, error) {
+	var block map[string]interface{}
+	err := c.engineClient.CallContext(
+		ctx, &block, "eth_getBlockByNumber", rpc.BlockNumber(height), false)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to get block at height %d: %w", height-1, err)
+	}
+	// Extract the block hash
+	blockHashStr, ok := block["hash"].(string)
+	if !ok {
+		return common.Hash{}, fmt.Errorf("failed to get block hash at height %d", height)
+	}
+	return common.HexToHash(blockHashStr), nil
+}
+
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
 func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
 	// convert rollkit tx to eth tx
@@ -208,13 +220,19 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		txsPayload[i] = buf.Bytes()
 	}
 
-	// update forkchoice
+	// fetch previous block hash to update forkchoice for the next payload id
+	prevBlockHash, err := c.getBlockHash(ctx, height-1)
+	if err != nil {
+		return execution_types.Hash{}, 0, err
+	}
+
+	// update forkchoice to get the next payload id
 	var forkchoiceResult engine.ForkChoiceResponse
-	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
-			HeadBlockHash:      c.prevBlockHash,
-			SafeBlockHash:      c.prevBlockHash,
-			FinalizedBlockHash: c.prevBlockHash,
+			HeadBlockHash:      prevBlockHash,
+			SafeBlockHash:      prevBlockHash,
+			FinalizedBlockHash: prevBlockHash,
 		},
 		&engine.PayloadAttributes{
 			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115
@@ -260,8 +278,6 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	if err != nil {
 		return execution_types.Hash{}, 0, err
 	}
-	// update prevBlockHash
-	c.prevBlockHash = blockHash
 
 	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasUsed, nil
 }
@@ -289,30 +305,16 @@ func (c *EngineAPIExecutionClient) setFinal(ctx context.Context, blockHash commo
 
 // SetFinal marks a block at the given height as final
 func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) error {
-	// block, err := c.ethClient.BlockByNumber(ctx, big.NewInt(int64(height))) //nolint:gosec // disable G115
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get block at height %d: %w", height, err)
-	// }
+	blockHash, err := c.getBlockHash(ctx, height)
+	if err != nil {
+		return err
+	}
 
-	// var forkchoiceResult engine.ForkChoiceResponse
-	// err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
-	// 	engine.ForkchoiceStateV1{
-	// 		HeadBlockHash:      block.Hash(),
-	// 		SafeBlockHash:      block.Hash(),
-	// 		FinalizedBlockHash: block.Hash(),
-	// 	},
-	// 	engine.PayloadAttributes{
-	// 		BeaconRoot: nil,
-	// 	},
-	// )
-	// if err != nil {
-	// 	return fmt.Errorf("engine_forkchoiceUpdatedV3 failed for finalization: %w", err)
-	// }
+	err = c.setFinal(ctx, blockHash)
+	if err != nil {
+		return err
+	}
 
-	// if forkchoiceResult.PayloadStatus.Status != engine.VALID {
-	// 	return ErrInvalidPayloadStatus
-	// }
-	// Disabled for now as we do setting finalization in ExecuteTxs
 	return nil
 }
 
