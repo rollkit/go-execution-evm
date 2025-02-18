@@ -40,6 +40,10 @@ func NewMockEngineAPI(t *testing.T) *MockEngineAPI {
 
 		method := req["method"].(string)
 		switch method {
+		case "eth_getBlockByNumber":
+			resp = map[string]interface{}{
+				"hash": "0x4bbb1357b89ddc1b1371f9ae83b72739a1815628f8648665fc332c3f0fb8d853",
+			}
 		case "engine_newPayloadV3":
 			resp = map[string]interface{}{
 				"status":          "VALID",
