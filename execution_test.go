@@ -95,7 +95,7 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	testTx := execution_types.Tx(testTxBytes)
 
 	ctx := context.Background()
-	stateRoot, gasUsed, err := client.ExecuteTxs(
+	stateRoot, maxGas, err := client.ExecuteTxs(
 		ctx,
 		[]execution_types.Tx{testTx},
 		blockHeight,
@@ -103,6 +103,7 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 		prevStateRoot,
 	)
 	require.NoError(t, err)
+	require.NotZero(t, maxGas)
 
 	lastCall := mockEngine.GetLastForkchoiceUpdated()
 	require.NotNil(t, lastCall)
@@ -113,7 +114,6 @@ func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
 	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 	require.Equal(t, execution_types.Hash(mockStateRoot[:]), stateRoot)
-	require.Equal(t, uint64(21000), gasUsed)
 }
 
 func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {

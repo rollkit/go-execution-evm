@@ -2,11 +2,9 @@ module github.com/rollkit/go-execution-evm
 
 go 1.22.8
 
-replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241108025553-291f75953069
-
 require (
 	github.com/ethereum/go-ethereum v1.15.0
-	github.com/rollkit/go-execution v0.0.0-00010101000000-000000000000
+	github.com/rollkit/go-execution v0.2.4-0.20250221092510-ad25cb2cecb9
 )
 
 require (
@@ -16,7 +14,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/bits-and-blooms/bitset v1.17.0 // indirect
-	github.com/celestiaorg/go-header v0.6.3 // indirect
+	github.com/celestiaorg/go-header v0.6.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/consensys/bavard v0.1.22 // indirect
 	github.com/consensys/gnark-crypto v0.14.0 // indirect
@@ -100,7 +98,6 @@ require (
 	go.opentelemetry.io/otel v1.32.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.32.0 // indirect
 	go.opentelemetry.io/otel/metric v1.32.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.32.0 // indirect
 	go.opentelemetry.io/otel/trace v1.32.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
@@ -110,8 +107,7 @@ require (
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20241113202542-65e8d215514f // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20241113202542-65e8d215514f // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
@@ -123,7 +119,7 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/spf13/cobra v1.8.1
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.35.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.70.0
 )

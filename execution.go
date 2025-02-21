@@ -293,7 +293,7 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		return execution_types.Hash{}, 0, err
 	}
 
-	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasUsed, nil
+	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasLimit, nil
 }
 
 func (c *EngineAPIExecutionClient) setFinal(ctx context.Context, blockHash common.Hash) error {

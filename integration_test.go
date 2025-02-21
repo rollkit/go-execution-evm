@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/rollkit/go-execution/test"
+	"github.com/stretchr/testify/suite"
 	"math/big"
 	"net/http"
 	"os"
@@ -20,11 +22,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	rollkit_types "github.com/rollkit/go-execution/types"
+	"github.com/rollkit/go-execution/types"
 )
 
 const (
@@ -201,7 +203,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	genesisHash := common.HexToHash(GENESIS_HASH)
 	genesisTime := time.Now().UTC().Truncate(time.Second)
 	genesisStateroot := common.HexToHash(GENESIS_STATEROOT)
-	rollkitGenesisStateRoot := rollkit_types.Hash(genesisStateroot[:])
+	rollkitGenesisStateRoot := types.Hash(genesisStateroot[:])
 
 	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
 	require.NoError(t, err)
@@ -241,9 +243,9 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	gasPrice := big.NewInt(30000000000)
 	toAddress := common.HexToAddress(TEST_TO_ADDRESS)
 
-	tx := types.NewTransaction(nonce, toAddress, txValue, gasLimit, gasPrice, nil)
+	tx := ethTypes.NewTransaction(nonce, toAddress, txValue, gasLimit, gasPrice, nil)
 
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+	signedTx, err := ethTypes.SignTx(tx, ethTypes.NewEIP155Signer(chainId), privateKey)
 	require.NoError(t, err)
 
 	rSignedTx, sSignedTx, vSignedTx := signedTx.RawSignatureValues()
@@ -256,7 +258,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, len(txs))
 
-		txResp := types.Transaction{}
+		txResp := ethTypes.Transaction{}
 		err = txResp.UnmarshalBinary(txs[0])
 		require.NoError(t, err)
 
@@ -279,9 +281,39 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	require.True(t, t.Run("ExecuteTxs", func(t *testing.T) {
 		newStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
 
-		stateroot, gasUsed, err := executionClient.ExecuteTxs(context.Background(), []rollkit_types.Tx{rollkit_types.Tx(txBytes)}, blockHeight, blockTime, rollkitGenesisStateRoot)
+		stateroot, maxGas, err := executionClient.ExecuteTxs(context.Background(), []types.Tx{txBytes}, blockHeight, blockTime, rollkitGenesisStateRoot)
 		require.NoError(t, err)
-		assert.Greater(t, gasLimit, gasUsed)
-		assert.Equal(t, rollkit_types.Hash(newStateroot[:]), stateroot)
+		assert.LessOrEqual(t, gasLimit, maxGas)
+		assert.Equal(t, types.Hash(newStateroot[:]), stateroot)
 	}))
+}
+
+type evmSuite struct {
+	test.ExecutorSuite
+}
+
+func (s *evmSuite) InjectRandomTx() types.Tx {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *evmSuite) SetupTest() {
+	jwtSecret := setupTestRethEngine(s.T())
+
+	genesisHash := common.HexToHash(GENESIS_HASH)
+
+	executionClient, err := NewEngineAPIExecutionClient(
+		TEST_ETH_URL,
+		TEST_ENGINE_URL,
+		jwtSecret,
+		genesisHash,
+		common.Address{},
+	)
+	s.Require().NoError(err)
+	s.Exec = executionClient
+	//s.TxInjector = s
+}
+
+func TestRunCommonSuite(t *testing.T) {
+	suite.Run(t, new(evmSuite))
 }
