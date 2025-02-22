@@ -205,9 +205,6 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	genesisStateroot := common.HexToHash(GENESIS_STATEROOT)
 	rollkitGenesisStateRoot := types.Hash(genesisStateroot[:])
 
-	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
-	require.NoError(t, err)
-
 	executionClient, err := NewEngineAPIExecutionClient(
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
@@ -233,25 +230,12 @@ func TestExecutionClientLifecycle(t *testing.T) {
 		require.ErrorContains(t, err, "Unsupported fork")
 	}))
 
-	privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
-	require.NoError(t, err)
-
-	chainId, _ := new(big.Int).SetString(CHAIN_ID, 10)
-	nonce := uint64(1)
-	txValue := big.NewInt(1000000000000000000)
-	gasLimit := uint64(21000)
-	gasPrice := big.NewInt(30000000000)
-	toAddress := common.HexToAddress(TEST_TO_ADDRESS)
-
-	tx := ethTypes.NewTransaction(nonce, toAddress, txValue, gasLimit, gasPrice, nil)
-
-	signedTx, err := ethTypes.SignTx(tx, ethTypes.NewEIP155Signer(chainId), privateKey)
-	require.NoError(t, err)
+	gasLimit := uint64(22000)
+	signedTx := getRandomTransaction(t, gasLimit)
 
 	rSignedTx, sSignedTx, vSignedTx := signedTx.RawSignatureValues()
 
-	err = rpcClient.SendTransaction(context.Background(), signedTx)
-	require.NoError(t, err)
+	submitTransaction(t, signedTx)
 
 	require.True(t, t.Run("GetTxs", func(t *testing.T) {
 		txs, err := executionClient.GetTxs(context.Background())
@@ -279,13 +263,47 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	blockTime := genesisTime.Add(10 * time.Second)
 
 	require.True(t, t.Run("ExecuteTxs", func(t *testing.T) {
-		newStateroot := common.HexToHash("0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4")
-
-		stateroot, maxGas, err := executionClient.ExecuteTxs(context.Background(), []types.Tx{txBytes}, blockHeight, blockTime, rollkitGenesisStateRoot)
+		stateRoot, maxGas, err := executionClient.ExecuteTxs(context.Background(), []types.Tx{txBytes}, blockHeight, blockTime, rollkitGenesisStateRoot)
 		require.NoError(t, err)
 		assert.LessOrEqual(t, gasLimit, maxGas)
-		assert.Equal(t, types.Hash(newStateroot[:]), stateroot)
+		assert.NotEqual(t, rollkitGenesisStateRoot, stateRoot)
 	}))
+}
+
+func submitTransaction(t *testing.T, signedTx *ethTypes.Transaction) {
+	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
+	require.NoError(t, err)
+	err = rpcClient.SendTransaction(context.Background(), signedTx)
+	require.NoError(t, err)
+}
+
+var lastNonce uint64
+
+func getRandomTransaction(t *testing.T, gasLimit uint64) *ethTypes.Transaction {
+	privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
+	require.NoError(t, err)
+
+	chainId, _ := new(big.Int).SetString(CHAIN_ID, 10)
+	txValue := big.NewInt(1000000000000000000)
+	gasPrice := big.NewInt(30000000000)
+	toAddress := common.HexToAddress(TEST_TO_ADDRESS)
+	data := make([]byte, 16)
+	_, err = rand.Read(data)
+	require.NoError(t, err)
+
+	tx := ethTypes.NewTx(&ethTypes.LegacyTx{
+		Nonce:    lastNonce,
+		To:       &toAddress,
+		Value:    txValue,
+		Gas:      gasLimit,
+		GasPrice: gasPrice,
+		Data:     data,
+	})
+	lastNonce++
+
+	signedTx, err := ethTypes.SignTx(tx, ethTypes.NewEIP155Signer(chainId), privateKey)
+	require.NoError(t, err)
+	return signedTx
 }
 
 type evmSuite struct {
@@ -293,8 +311,11 @@ type evmSuite struct {
 }
 
 func (s *evmSuite) InjectRandomTx() types.Tx {
-	//TODO implement me
-	panic("implement me")
+	tx := getRandomTransaction(s.T(), 22000)
+	submitTransaction(s.T(), tx)
+	bytes, err := tx.MarshalBinary()
+	require.NoError(s.T(), err)
+	return bytes
 }
 
 func (s *evmSuite) SetupTest() {
@@ -311,7 +332,8 @@ func (s *evmSuite) SetupTest() {
 	)
 	s.Require().NoError(err)
 	s.Exec = executionClient
-	//s.TxInjector = s
+	s.TxInjector = s
+	lastNonce = uint64(0)
 }
 
 func TestRunCommonSuite(t *testing.T) {
