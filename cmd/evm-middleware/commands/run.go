@@ -23,6 +23,7 @@ var (
 	genesisHashHex string
 	ethURL         string
 	engineURL      string
+	maxMsgSize     int
 )
 
 func init() {
@@ -35,6 +36,7 @@ func init() {
 	runCmd.Flags().StringVar(&genesisHashHex, "genesis-hash", "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216", "Genesis hash of the EVM chain")
 	runCmd.Flags().StringVar(&ethURL, "eth-url", "http://127.0.0.1:8545", "URL of the ETH API exposed by EVM node")
 	runCmd.Flags().StringVar(&engineURL, "engine-url", "http://127.0.0.1:8551", "URL of the Engine API exposed by EVM node")
+	runCmd.Flags().IntVar(&maxMsgSize, "max-msg-size", 4*1024*1024, "Maximum message size for gRPC connections (in bytes)") // New flag for maxMsgSize
 
 	// Attach the `runCmd` to the root command
 	rootCmd.AddCommand(runCmd)
@@ -70,7 +72,10 @@ var runCmd = &cobra.Command{
 
 		log.Println("Starting GRPC server...")
 		server := grpcproxy.NewServer(evmClient, grpcproxy.DefaultConfig())
-		s := grpc.NewServer()
+		s := grpc.NewServer(
+			grpc.MaxRecvMsgSize(maxMsgSize), // Use the value from the flag
+			grpc.MaxSendMsgSize(maxMsgSize), // Use the value from the flag
+		)
 		pb.RegisterExecutionServiceServer(s, server)
 
 		wg := sync.WaitGroup{}
