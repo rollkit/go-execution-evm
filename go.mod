@@ -4,10 +4,8 @@ go 1.22.8
 
 require (
 	github.com/ethereum/go-ethereum v1.15.0
-	github.com/rollkit/go-execution v0.2.4-0.20250221114017-d24bbf4c4a77
+	github.com/rollkit/go-execution v0.2.4-0.20250227204207-fccb99951758
 )
-
-replace github.com/rollkit/go-execution => ../go-execution
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

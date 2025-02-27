@@ -310,12 +310,26 @@ type evmSuite struct {
 	test.ExecutorSuite
 }
 
-func (s *evmSuite) InjectRandomTx() types.Tx {
-	tx := getRandomTransaction(s.T(), 22000)
-	submitTransaction(s.T(), tx)
-	bytes, err := tx.MarshalBinary()
-	require.NoError(s.T(), err)
-	return bytes
+func (s *evmSuite) GetRandomTxs(n int) []types.Tx {
+	txs := make([]types.Tx, n)
+	for i := 0; i < n; i++ {
+		tx := getRandomTransaction(s.T(), 22000)
+
+		bytes, err := tx.MarshalBinary()
+		require.NoError(s.T(), err)
+		txs[i] = bytes
+	}
+	return txs
+}
+
+func (s *evmSuite) InjectTxs(txs []types.Tx) error {
+	for _, txBytes := range txs {
+		var tx ethTypes.Transaction
+		err := tx.UnmarshalBinary(txBytes)
+		s.Require().NoError(err)
+		submitTransaction(s.T(), &tx)
+	}
+	return nil
 }
 
 func (s *evmSuite) SetupTest() {
