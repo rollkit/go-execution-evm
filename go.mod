@@ -4,7 +4,7 @@ go 1.22.8
 
 require (
 	github.com/ethereum/go-ethereum v1.15.0
-	github.com/rollkit/go-execution v0.2.4-0.20250227204207-fccb99951758
+	github.com/rollkit/go-execution v0.2.4-0.20250303165946-dc52ad420afc
 )
 
 require (
