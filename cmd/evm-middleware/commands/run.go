@@ -63,12 +63,10 @@ var runCmd = &cobra.Command{
 
 		genesisHash := common.HexToHash(genesisHashHex)
 
-		evmClient, err := evm.NewEngineAPIExecutionClient(ethURL, engineURL, jwtSecret, genesisHash, common.Address{})
+		evmClient, err := evm.NewPureEngineExecutionClient(engineURL, jwtSecret, genesisHash, common.Address{})
 		if err != nil {
 			return fmt.Errorf("failed to create Engine API client middleware: %w", err)
 		}
-		_ = evmClient.Start()
-		defer evmClient.Stop()
 
 		log.Println("Starting GRPC server...")
 		server := grpcproxy.NewServer(evmClient, grpcproxy.DefaultConfig())
