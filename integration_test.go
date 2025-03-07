@@ -127,9 +127,7 @@ func setupTestRethEngine(t *testing.T) string {
 	})
 	require.NoError(t, err)
 
-	t.Cleanup(func() {
-		testcontainers.CleanupContainer(t, rethContainer)
-	})
+	testcontainers.CleanupContainer(t, rethContainer)
 
 	err = waitForRethContainer(t, jwtSecret)
 	require.NoError(t, err)
