@@ -1,9 +1,9 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -11,13 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/golang-jwt/jwt/v5"
 
 	execution "github.com/rollkit/go-execution"
 	execution_types "github.com/rollkit/go-execution/types"
@@ -31,25 +30,27 @@ var (
 )
 
 // Ensure EngineAPIExecutionClient implements the execution.Execute interface
-var _ execution.Executor = (*EngineAPIExecutionClient)(nil)
+var _ execution.Executor = (*PureEngineClient)(nil)
 
-// EngineAPIExecutionClient implements the execution.Execute interface
-type EngineAPIExecutionClient struct {
-	engineClient  *rpc.Client // engine api
-	ethClient     *ethclient.Client
-	genesisHash   common.Hash
-	initialHeight uint64
-	feeRecipient  common.Address
+// PureEngineClient represents a client that interacts with an Ethereum execution engine
+// through the Engine API. It manages connections to both the engine and standard Ethereum
+// APIs, and maintains state related to block processing.
+type PureEngineClient struct {
+	engineClient *rpc.Client       // Client for Engine API calls
+	ethClient    *ethclient.Client // Client for standard Ethereum API calls
+	genesisHash  common.Hash       // Hash of the genesis block
+	feeRecipient common.Address    // Address to receive transaction fees
+	payloadID    *engine.PayloadID // ID of the current execution payload being processed
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
-func NewEngineAPIExecutionClient(
+func NewPureEngineExecutionClient(
 	ethURL,
 	engineURL string,
 	jwtSecret string,
 	genesisHash common.Hash,
 	feeRecipient common.Address,
-) (*EngineAPIExecutionClient, error) {
+) (*PureEngineClient, error) {
 	ethClient, err := ethclient.Dial(ethURL)
 	if err != nil {
 		return nil, err
@@ -73,37 +74,19 @@ func NewEngineAPIExecutionClient(
 			return nil
 		}))
 	if err != nil {
-		ethClient.Close() // Clean up eth client if engine client fails
 		return nil, err
 	}
 
-	return &EngineAPIExecutionClient{
-		engineClient:  engineClient,
-		ethClient:     ethClient,
-		genesisHash:   genesisHash,
-		initialHeight: 1, // set to 1 and updated in InitChain
-		feeRecipient:  feeRecipient,
+	return &PureEngineClient{
+		engineClient: engineClient,
+		ethClient:    ethClient,
+		genesisHash:  genesisHash,
+		feeRecipient: feeRecipient,
 	}, nil
 }
 
-// Start starts the execution client
-func (c *EngineAPIExecutionClient) Start() error {
-	return nil
-}
-
-// Stop stops the execution client and closes all connections
-func (c *EngineAPIExecutionClient) Stop() {
-	if c.engineClient != nil {
-		c.engineClient.Close()
-	}
-
-	if c.ethClient != nil {
-		c.ethClient.Close()
-	}
-}
-
-// InitChain initializes the blockchain with genesis information
-func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
+func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
+	// Acknowledge the genesis block
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
@@ -111,9 +94,22 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 			SafeBlockHash:      c.genesisHash,
 			FinalizedBlockHash: c.genesisHash,
 		},
+		nil,
+	)
+	if err != nil {
+		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
+	}
+
+	// Start building the first block
+	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+		engine.ForkchoiceStateV1{
+			HeadBlockHash:      c.genesisHash,
+			SafeBlockHash:      c.genesisHash,
+			FinalizedBlockHash: c.genesisHash,
+		},
 		engine.PayloadAttributes{
 			Timestamp:             uint64(genesisTime.Unix()), //nolint:gosec // disable G115
-			Random:                common.Hash{},
+			Random:                common.Hash{},              // TODO(tzdybal): this probably shouldn't be 0
 			SuggestedFeeRecipient: c.feeRecipient,
 			BeaconRoot:            &c.genesisHash,
 			Withdrawals:           []*types.Withdrawal{},
@@ -127,178 +123,112 @@ func (c *EngineAPIExecutionClient) InitChain(ctx context.Context, genesisTime ti
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
 	}
 
-	// Retrieve the Genesis Execution Payload
-	// Ensures the execution client recognizes the genesis block.
-	var payloadResult engine.ExecutionPayloadEnvelope
-	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
+	c.payloadID = forkchoiceResult.PayloadID
+
+	_, stateRoot, gasLimit, err := c.getBlockInfo(ctx, 0)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
+		return execution_types.Hash{}, 0, fmt.Errorf("failed to get genesis block info: %w", err)
 	}
 
-	// Confirm Finalization Using engine_forkchoiceUpdatedV3 Again
-	// Ensures that the genesis block is permanently finalized.
-	blockHash := c.genesisHash
-	err = c.setFinal(ctx, blockHash)
-	if err != nil {
-		return execution_types.Hash{}, 0, err
-	}
-
-	stateRoot := payloadResult.ExecutionPayload.StateRoot
-	rollkitStateRoot := execution_types.Hash(stateRoot[:])
-
-	gasLimit := payloadResult.ExecutionPayload.GasLimit
-
-	c.initialHeight = initialHeight
-
-	return rollkitStateRoot, gasLimit, nil
+	return stateRoot[:], gasLimit, nil
 }
 
-// GetTxs retrieves transactions from the transaction pool
-func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_types.Tx, error) {
-	var result struct {
-		Pending map[string]map[string]*types.Transaction `json:"pending"`
-		Queued  map[string]map[string]*types.Transaction `json:"queued"`
-	}
-	err := c.ethClient.Client().CallContext(ctx, &result, "txpool_content")
+func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, error) {
+	var payloadResult engine.ExecutionPayloadEnvelope
+	err := c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", c.payloadID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get tx pool content: %w", err)
+		return nil, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
 	}
 
-	var txs []execution_types.Tx
+	// Store the original transactions
+	originalTxs := payloadResult.ExecutionPayload.Transactions
 
-	// add pending txs
-	for _, accountTxs := range result.Pending {
-		for _, tx := range accountTxs {
-			txBytes, err := tx.MarshalBinary()
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal transaction: %w", err)
-			}
-			txs = append(txs, execution_types.Tx(txBytes))
-		}
+	// Clear transactions before serializing
+	payloadResult.ExecutionPayload.Transactions = [][]byte{}
+
+	jsonPayloadResult, err := json.Marshal(payloadResult)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize payloadResult: %w", err)
 	}
 
-	// add queued txs
-	for _, accountTxs := range result.Queued {
-		for _, tx := range accountTxs {
-			txBytes, err := tx.MarshalBinary()
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal transaction: %w", err)
-			}
-			txs = append(txs, execution_types.Tx(txBytes))
-		}
+	// Create the result with serialized payload as first tx, followed by original transactions
+	txs := make([]execution_types.Tx, len(originalTxs)+1)
+	txs[0] = jsonPayloadResult
+	for i, tx := range originalTxs {
+		txs[i+1] = tx
 	}
+
 	return txs, nil
 }
 
-func (c *EngineAPIExecutionClient) getBlockHash(ctx context.Context, height uint64) (common.Hash, error) {
-	var block map[string]interface{}
-	err := c.engineClient.CallContext(
-		ctx, &block, "eth_getBlockByNumber", rpc.BlockNumber(height), false) //nolint:gosec // disable G115
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get block at height %d: %w", height, err)
-	}
-	// Extract the block hash
-	blockHashStr, ok := block["hash"].(string)
-	if !ok {
-		return common.Hash{}, fmt.Errorf("failed to get block hash at height %d", height)
-	}
-	return common.HexToHash(blockHashStr), nil
-}
-
-// ExecuteTxs executes the given transactions and returns the new state root and gas used
-func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, height uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (execution_types.Hash, uint64, error) {
-	// convert rollkit tx to eth tx
-	ethTxs := make([]*types.Transaction, len(txs))
-	for i, tx := range txs {
-		ethTxs[i] = new(types.Transaction)
-		err := ethTxs[i].UnmarshalBinary(tx)
-		if err != nil {
-			return execution_types.Hash{}, 0, fmt.Errorf("failed to unmarshal transaction: %w", err)
-		}
-	}
-
-	// encode
-	txsPayload := make([][]byte, len(txs))
-	for i, tx := range ethTxs {
-		buf := bytes.Buffer{}
-		err := tx.EncodeRLP(&buf)
-		if err != nil {
-			return execution_types.Hash{}, 0, fmt.Errorf("failed to RLP encode tx: %w", err)
-		}
-		txsPayload[i] = buf.Bytes()
-	}
-
-	// fetch previous block hash to update forkchoice for the next payload id
-	var err error
-	var prevBlockHash common.Hash
-	if height == c.initialHeight {
-		prevBlockHash = c.genesisHash
-	} else {
-		prevBlockHash, err = c.getBlockHash(ctx, height-1)
-		if err != nil {
-			return execution_types.Hash{}, 0, err
-		}
-	}
-
-	// update forkchoice to get the next payload id
-	var forkchoiceResult engine.ForkChoiceResponse
-	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
-		engine.ForkchoiceStateV1{
-			HeadBlockHash: prevBlockHash,
-			SafeBlockHash: prevBlockHash,
-			// FinalizedBlockHash: prevBlockHash,
-		},
-		&engine.PayloadAttributes{
-			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115
-			Random:                c.derivePrevRandao(height),
-			SuggestedFeeRecipient: c.feeRecipient,
-			Withdrawals:           []*types.Withdrawal{},
-			BeaconRoot:            &c.genesisHash,
-		},
-	)
-	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("forkchoice update failed: %w", err)
-	}
-
-	if forkchoiceResult.PayloadID == nil {
-		return execution_types.Hash{}, 0, ErrNilPayloadStatus
-	}
-
-	// get payload
+func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, blockHeight uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (updatedStateRoot execution_types.Hash, maxBytes uint64, err error) {
 	var payloadResult engine.ExecutionPayloadEnvelope
-	err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", *forkchoiceResult.PayloadID)
+	// First tx is the serialized payload
+	firstTx := txs[0]
+	err = json.Unmarshal(firstTx, &payloadResult)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("get payload failed: %w", err)
+		return execution_types.Hash{}, 0, fmt.Errorf("failed to deserialize first transaction as ExecutionPayload: %w", err)
 	}
 
-	// submit payload
+	// Add transactions from txs to the payload (skip the first one which is the payload itself)
+	payloadResult.ExecutionPayload.Transactions = make([][]byte, len(txs)-1)
+	for i := 1; i < len(txs); i++ {
+		payloadResult.ExecutionPayload.Transactions[i-1] = txs[i]
+	}
+
 	var newPayloadResult engine.PayloadStatusV1
 	err = c.engineClient.CallContext(ctx, &newPayloadResult, "engine_newPayloadV3",
 		payloadResult.ExecutionPayload,
 		[]string{}, // No blob hashes
 		c.genesisHash.Hex(),
 	)
+
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed: %w", err)
 	}
 
 	if newPayloadResult.Status != engine.VALID {
-		return execution_types.Hash{}, 0, ErrInvalidPayloadStatus
+		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed with: %s", *newPayloadResult.ValidationError)
 	}
 
 	// forkchoice update
 	blockHash := payloadResult.ExecutionPayload.BlockHash
-	err = c.setFinal(ctx, blockHash)
+	var forkchoiceResult engine.ForkChoiceResponse
+	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+		engine.ForkchoiceStateV1{
+			HeadBlockHash: blockHash,
+			SafeBlockHash: blockHash,
+			// FinalizedBlockHash: blockHash,
+		},
+		&engine.PayloadAttributes{
+			Timestamp:             uint64(time.Now().Unix()), //nolint:gosec // disable G115
+			Random:                c.derivePrevRandao(blockHeight),
+			SuggestedFeeRecipient: c.feeRecipient,
+			BeaconRoot:            &c.genesisHash,
+			Withdrawals:           []*types.Withdrawal{},
+		},
+	)
 	if err != nil {
-		return execution_types.Hash{}, 0, err
+		return nil, 0, fmt.Errorf("forkchoice update failed with error: %w", err)
 	}
+
+	if forkchoiceResult.PayloadStatus.Status != engine.VALID {
+		return nil, 0, ErrInvalidPayloadStatus
+	}
+
+	c.payloadID = forkchoiceResult.PayloadID
 
 	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasLimit, nil
 }
 
-func (c *EngineAPIExecutionClient) setFinal(ctx context.Context, blockHash common.Hash) error {
+func (c *PureEngineClient) SetFinal(ctx context.Context, blockHeight uint64) error {
+	blockHash, _, _, err := c.getBlockInfo(ctx, blockHeight)
+	if err != nil {
+		return fmt.Errorf("failed to get block info: %w", err)
+	}
+
 	var forkchoiceResult engine.ForkChoiceResponse
-	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
 			HeadBlockHash:      blockHash,
 			SafeBlockHash:      blockHash,
@@ -317,26 +247,18 @@ func (c *EngineAPIExecutionClient) setFinal(ctx context.Context, blockHash commo
 	return nil
 }
 
-// SetFinal marks a block at the given height as final
-func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) error {
-	blockHash, err := c.getBlockHash(ctx, height)
-	if err != nil {
-		return err
-	}
-
-	err = c.setFinal(ctx, blockHash)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// derivePrevRandao generates a deterministic prevRandao value based on block height
-func (c *EngineAPIExecutionClient) derivePrevRandao(blockHeight uint64) common.Hash {
+func (c *PureEngineClient) derivePrevRandao(blockHeight uint64) common.Hash {
 	return common.BigToHash(big.NewInt(int64(blockHeight))) //nolint:gosec // disable G115
 }
 
+func (c *PureEngineClient) getBlockInfo(ctx context.Context, height uint64) (common.Hash, common.Hash, uint64, error) {
+	header, err := c.ethClient.HeaderByNumber(ctx, big.NewInt(int64(height)))
+	if err != nil {
+		return common.Hash{}, common.Hash{}, 0, fmt.Errorf("failed to get block at height %d: %w", height, err)
+	}
+
+	return header.Hash(), header.Root, header.GasLimit, nil
+}
 func decodeSecret(jwtSecret string) ([]byte, error) {
 	secret, err := hex.DecodeString(strings.TrimPrefix(jwtSecret, "0x"))
 	if err != nil {

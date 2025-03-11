@@ -1,216 +1,191 @@
-package execution_test
+package execution
 
 import (
 	"context"
-	"encoding/hex"
-	"encoding/json"
-	"io"
-	"math/big"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-
-	"github.com/rollkit/go-execution-evm"
-	execution_types "github.com/rollkit/go-execution/types"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rollkit/go-execution/types"
+	"github.com/stretchr/testify/require"
 )
 
-// Helper function to generate a test JWT secret
-func generateTestJWTSecret() string {
-	// Generate a random 32-byte hex string for testing
-	secret := make([]byte, 32)
-	for i := range secret {
-		secret[i] = byte(i)
+// createEthClient creates an Ethereum client for checking block information
+func createEthClient(t *testing.T) *ethclient.Client {
+	t.Helper()
+
+	// Use the same ETH URL as in the tests
+	ethClient, err := ethclient.Dial(TEST_ETH_URL)
+	require.NoError(t, err, "Failed to create Ethereum client")
+
+	return ethClient
+}
+
+// checkLatestBlock retrieves and returns the latest block height, hash, and transaction count using Ethereum API
+func checkLatestBlock(t *testing.T, ctx context.Context) (uint64, common.Hash, int) {
+	t.Helper()
+
+	// Create an Ethereum client
+	ethClient := createEthClient(t)
+	defer ethClient.Close()
+
+	// Get the latest block header
+	header, err := ethClient.HeaderByNumber(ctx, nil) // nil means latest block
+	if err != nil {
+		t.Logf("Warning: Failed to get latest block header: %v", err)
+		return 0, common.Hash{}, 0
 	}
-	return hex.EncodeToString(secret)
+
+	blockNumber := header.Number.Uint64()
+	blockHash := header.Hash()
+
+	// Get the full block to count transactions
+	block, err := ethClient.BlockByNumber(ctx, header.Number)
+	if err != nil {
+		t.Logf("Warning: Failed to get full block: %v", err)
+		t.Logf("Latest block: height=%d, hash=%s, txs=unknown", blockNumber, blockHash.Hex())
+		return blockNumber, blockHash, 0
+	}
+
+	txCount := len(block.Transactions())
+
+	//t.Logf("Latest block: height=%d, hash=%s, txs=%d", blockNumber, blockHash.Hex(), txCount)
+	return blockNumber, blockHash, txCount
 }
 
-func TestEngineAPIExecutionClient_InitChain(t *testing.T) {
-	mockEngine := NewMockEngineAPI(t)
-	defer mockEngine.Close()
+func TestEngineExecution(t *testing.T) {
+	allPayloads := make([][]types.Tx, 0) // Slice to store payloads from build to sync phase
 
-	mockEth := NewMockEthAPI(t)
-	defer mockEth.Close()
-
-	jwtSecret := generateTestJWTSecret()
-	client, err := execution.NewEngineAPIExecutionClient(
-		mockEth.URL,
-		mockEngine.URL,
-		jwtSecret,
-		common.Hash{},
-		common.Address{},
-	)
-	require.NoError(t, err)
-
-	genesisTime := time.Now().UTC().Truncate(time.Second)
 	initialHeight := uint64(0)
-	chainID := "11155111" // sepolia chain id
+	genesisHash := common.HexToHash(GENESIS_HASH)
+	genesisTime := time.Now().UTC().Truncate(time.Second)
+	genesisStateRoot := common.HexToHash(GENESIS_STATEROOT)
+	rollkitGenesisStateRoot := types.Hash(genesisStateRoot[:])
 
-	ctx := context.Background()
-	stateRoot, gasLimit, err := client.InitChain(ctx, genesisTime, initialHeight, chainID)
-	require.NoError(t, err)
+	t.Run("Build chain", func(tt *testing.T) {
+		jwtSecret := setupTestRethEngine(tt)
 
-	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	expectedStateRoot := execution_types.Hash(mockStateRoot[:])
-
-	require.Equal(t, expectedStateRoot, stateRoot)
-	require.Equal(t, uint64(1000000), gasLimit)
-
-	lastCall := mockEngine.GetLastForkchoiceUpdated()
-	require.NotNil(t, lastCall)
-	require.Equal(t, common.Hash{}.Hex(), lastCall.HeadBlockHash)
-	require.Equal(t, common.Hash{}.Hex(), lastCall.SafeBlockHash)
-	require.Equal(t, common.Hash{}.Hex(), lastCall.FinalizedBlockHash)
-}
-
-func TestEngineAPIExecutionClient_ExecuteTxs(t *testing.T) {
-	mockEngine := NewMockEngineAPI(t)
-	defer mockEngine.Close()
-
-	mockEth := NewMockEthAPI(t)
-	defer mockEth.Close()
-
-	jwtSecret := generateTestJWTSecret()
-	prevStateRoot := execution_types.Hash(common.Hex2Bytes("111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000"))
-	updatedStateRoot := execution_types.Hash(common.Hex2Bytes("0000000000000000000000000000000000000000000000000000000000000000"))
-	client, err := execution.NewEngineAPIExecutionClient(
-		mockEth.URL,
-		mockEngine.URL,
-		jwtSecret,
-		common.Hash(prevStateRoot),
-		common.Address{},
-	)
-	require.NoError(t, err)
-
-	blockHeight := uint64(1)
-	timestamp := time.Now().UTC().Truncate(time.Second)
-
-	testTxBytes, err := types.NewTransaction(1, common.Address{}, big.NewInt(0), 1000, big.NewInt(875000000), nil).MarshalBinary()
-	require.NoError(t, err)
-	testTx := execution_types.Tx(testTxBytes)
-
-	ctx := context.Background()
-	stateRoot, maxGas, err := client.ExecuteTxs(
-		ctx,
-		[]execution_types.Tx{testTx},
-		blockHeight,
-		timestamp,
-		prevStateRoot,
-	)
-	require.NoError(t, err)
-	require.NotZero(t, maxGas)
-
-	lastCall := mockEngine.GetLastForkchoiceUpdated()
-	require.NotNil(t, lastCall)
-	require.Equal(t, common.BytesToHash(updatedStateRoot[:]).Hex(), lastCall.HeadBlockHash)
-	require.Equal(t, common.BytesToHash(updatedStateRoot[:]).Hex(), lastCall.SafeBlockHash)
-	require.Equal(t, common.BytesToHash(updatedStateRoot[:]).Hex(), lastCall.FinalizedBlockHash)
-
-	mockStateRoot := common.HexToHash("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-
-	require.Equal(t, execution_types.Hash(mockStateRoot[:]), stateRoot)
-}
-
-func TestEngineAPIExecutionClient_GetTxs(t *testing.T) {
-	mockEngine := NewMockEngineAPI(t)
-	defer mockEngine.Close()
-
-	mockEth := NewMockEthAPI(t)
-	defer mockEth.Close()
-
-	jwtSecret := generateTestJWTSecret()
-	client, err := execution.NewEngineAPIExecutionClient(
-		mockEth.URL,
-		mockEngine.URL,
-		jwtSecret,
-		common.Hash{},
-		common.Address{},
-	)
-	require.NoError(t, err)
-
-	mockEth.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var resp interface{}
-
-		body, err := io.ReadAll(r.Body)
+		executionClient, err := NewPureEngineExecutionClient(
+			TEST_ETH_URL,
+			TEST_ENGINE_URL,
+			jwtSecret,
+			genesisHash,
+			common.Address{},
+		)
 		require.NoError(t, err)
 
-		var req map[string]interface{}
-		err = json.Unmarshal(body, &req)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		stateRoot, gasLimit, err := executionClient.InitChain(ctx, genesisTime, initialHeight, CHAIN_ID)
 		require.NoError(t, err)
+		require.Equal(t, rollkitGenesisStateRoot, stateRoot)
+		require.NotZero(t, gasLimit)
 
-		method := req["method"].(string)
-		if method == "txpool_content" {
-			resp = map[string]interface{}{
-				"pending": map[string]interface{}{
-					"0x1234567890123456789012345678901234567890": map[string]interface{}{
-						"0": map[string]interface{}{
-							"input":    "0x123456",
-							"nonce":    "0x0",
-							"from":     "0x1234567890123456789012345678901234567890",
-							"to":       "0x0987654321098765432109876543210987654321",
-							"value":    "0x0",
-							"gas":      "0x5208",
-							"gasPrice": "0x3b9aca00",
-							"chainId":  "0x1",
-							"v":        "0x1b",
-							"r":        "0x1234",
-							"s":        "0x5678",
-							"hash":     "0x1234567890123456789012345678901234567890123456789012345678901234",
-							"type":     "0x0",
-						},
-					},
-				},
-				"queued": map[string]interface{}{},
+		prevStateRoot := rollkitGenesisStateRoot
+		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
+
+		for blockHeight := initialHeight + 1; blockHeight <= 10; blockHeight++ {
+			nTxs := int(blockHeight) + 10
+			// randomly use no transactions
+			if blockHeight == 4 {
+				nTxs = 0
 			}
+			txs := make([]*ethTypes.Transaction, nTxs)
+			for i := range txs {
+				txs[i] = getRandomTransaction(t, 22000)
+			}
+			for i := range txs {
+				submitTransaction(t, txs[i])
+			}
+			time.Sleep(1000 * time.Millisecond)
+
+			payload, err := executionClient.GetTxs(ctx)
+			require.NoError(tt, err)
+			require.Len(tt, payload, nTxs+1)
+
+			allPayloads = append(allPayloads, payload)
+
+			// Check latest block before execution
+			beforeHeight, beforeHash, beforeTxs := checkLatestBlock(tt, ctx)
+			require.Equal(tt, lastHeight, beforeHeight, "Latest block height should match")
+			require.Equal(tt, lastHash.Hex(), beforeHash.Hex(), "Latest block hash should match")
+			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
+
+			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
+			require.NoError(tt, err)
+			require.NotZero(tt, maxBytes)
+
+			err = executionClient.SetFinal(ctx, blockHeight)
+			require.NoError(tt, err)
+
+			// Check latest block after execution
+			lastHeight, lastHash, lastTxs = checkLatestBlock(tt, ctx)
+			require.Equal(tt, blockHeight, lastHeight, "Latest block height should match")
+			require.NotEmpty(tt, lastHash.Hex(), "Latest block hash should not be empty")
+			require.GreaterOrEqual(tt, lastTxs, 0, "Number of transactions should be non-negative")
+
+			if nTxs == 0 {
+				require.Equal(tt, prevStateRoot, newStateRoot)
+			} else {
+				require.NotEqual(tt, prevStateRoot, newStateRoot)
+			}
+			prevStateRoot = newStateRoot
 		}
+	})
 
-		err = json.NewEncoder(w).Encode(map[string]interface{}{
-			"jsonrpc": "2.0",
-			"id":      req["id"],
-			"result":  resp,
-		})
+	// start new container and try to sync
+	t.Run("Sync chain", func(tt *testing.T) {
+		jwtSecret := setupTestRethEngine(t)
+
+		executionClient, err := NewPureEngineExecutionClient(
+			TEST_ETH_URL,
+			TEST_ENGINE_URL,
+			jwtSecret,
+			genesisHash,
+			common.Address{},
+		)
 		require.NoError(t, err)
-	}))
 
-	ctx := context.Background()
-	txs, err := client.GetTxs(ctx)
-	require.NoError(t, err)
-	require.NotEmpty(t, txs)
-	require.Greater(t, len(txs), 0)
-}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		stateRoot, gasLimit, err := executionClient.InitChain(ctx, genesisTime, initialHeight, CHAIN_ID)
+		require.NoError(t, err)
+		require.Equal(t, rollkitGenesisStateRoot, stateRoot)
+		require.NotZero(t, gasLimit)
 
-func TestEngineAPIExecutionClient_SetFinal(t *testing.T) {
-	mockEngine := NewMockEngineAPI(t)
-	defer mockEngine.Close()
+		prevStateRoot := rollkitGenesisStateRoot
+		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
 
-	mockEth := NewMockEthAPI(t)
-	defer mockEth.Close()
+		for blockHeight := initialHeight + 1; blockHeight-initialHeight <= 10; blockHeight++ {
+			payload := allPayloads[blockHeight-initialHeight-1]
 
-	jwtSecret := generateTestJWTSecret()
-	client, err := execution.NewEngineAPIExecutionClient(
-		mockEth.URL,
-		mockEngine.URL,
-		jwtSecret,
-		common.Hash{},
-		common.Address{},
-	)
-	require.NoError(t, err)
+			// Check latest block before execution
+			beforeHeight, beforeHash, beforeTxs := checkLatestBlock(tt, ctx)
+			require.Equal(tt, lastHeight, beforeHeight, "Latest block height should match")
+			require.Equal(tt, lastHash.Hex(), beforeHash.Hex(), "Latest block hash should match")
+			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
 
-	blockHeight := uint64(1)
-	ctx := context.Background()
-	err = client.SetFinal(ctx, blockHeight)
-	require.NoError(t, err)
+			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
+			require.NoErrorf(tt, err, "blockHeight: %d, nTxs: %d", blockHeight, len(payload)-1)
+			require.NotZero(tt, maxBytes)
 
-	lastCall := mockEngine.GetLastForkchoiceUpdated()
-	require.NotNil(t, lastCall)
+			err = executionClient.SetFinal(ctx, blockHeight)
+			require.NoError(tt, err)
 
-	expectedBlockHash := "0x4bbb1357b89ddc1b1371f9ae83b72739a1815628f8648665fc332c3f0fb8d853"
-	require.Equal(t, expectedBlockHash, lastCall.FinalizedBlockHash)
-	require.Equal(t, expectedBlockHash, lastCall.HeadBlockHash)
-	require.Equal(t, expectedBlockHash, lastCall.SafeBlockHash)
+			// Check latest block after execution
+			lastHeight, lastHash, lastTxs = checkLatestBlock(tt, ctx)
+			require.Equal(tt, blockHeight, lastHeight, "Latest block height should match")
+			require.NotEmpty(tt, lastHash.Hex(), "Latest block hash should not be empty")
+			require.GreaterOrEqual(tt, lastTxs, 0, "Number of transactions should be non-negative")
+
+			if len(payload)-1 == 0 {
+				require.Equal(tt, prevStateRoot, newStateRoot)
+			} else {
+				require.NotEqual(tt, prevStateRoot, newStateRoot)
+			}
+			prevStateRoot = newStateRoot
+		}
+	})
 }

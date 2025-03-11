@@ -219,7 +219,7 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	genesisStateroot := common.HexToHash(GENESIS_STATEROOT)
 	rollkitGenesisStateRoot := types.Hash(genesisStateroot[:])
 
-	executionClient, err := NewEngineAPIExecutionClient(
+	executionClient, err := NewPureEngineExecutionClient(
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
 		jwtSecret,
@@ -351,7 +351,7 @@ func (s *evmSuite) SetupTest() {
 
 	genesisHash := common.HexToHash(GENESIS_HASH)
 
-	executionClient, err := NewEngineAPIExecutionClient(
+	executionClient, err := NewPureEngineExecutionClient(
 		TEST_ETH_URL,
 		TEST_ENGINE_URL,
 		jwtSecret,
