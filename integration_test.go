@@ -5,8 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/rollkit/go-execution/test"
-	"github.com/stretchr/testify/suite"
+	"io"
 	"math/big"
 	"net/http"
 	"os"
@@ -14,6 +13,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rollkit/go-execution/test"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
@@ -34,7 +36,7 @@ const (
 	TEST_ENGINE_URL = "http://localhost:8551"
 
 	CHAIN_ID          = "1234"
-	GENESIS_HASH      = "0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216"
+	GENESIS_HASH      = "0x568201e3a763b59f7c646d72bf75a25aafff57f98a82dbd7b50542382c55f372"
 	GENESIS_STATEROOT = "0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4"
 	TEST_PRIVATE_KEY  = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
 	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
@@ -79,12 +81,11 @@ func setupTestRethEngine(t *testing.T) string {
 
 	rethReq := testcontainers.ContainerRequest{
 		Name:       "reth",
-		Image:      "ghcr.io/paradigmxyz/reth:v1.1.1",
+		Image:      "ghcr.io/paradigmxyz/reth:v1.2.1",
 		Entrypoint: []string{"/bin/sh", "-c"},
 		Cmd: []string{
 			`
-				reth init --chain /root/chain/genesis.json && \
-          		reth node \
+				reth node \
           		--chain /root/chain/genesis.json \
           		--metrics 0.0.0.0:9001 \
           		--log.file.directory /root/logs \
@@ -94,8 +95,7 @@ func setupTestRethEngine(t *testing.T) string {
           		--http --http.addr 0.0.0.0 --http.port 8545 \
           		--http.api "eth,net,web3,txpool" \
           		--disable-discovery \
-          		--debug.tip 0x8bf225d50da44f60dee1c4ee6f810fe5b44723c76ac765654b6692d50459f216 \
-          		-vvvv
+				-vvvv
 				`,
 		},
 		ExposedPorts: []string{"8545/tcp", "8551/tcp"},
@@ -143,12 +143,28 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 		Timeout: 100 * time.Millisecond,
 	}
 
-	timer := time.NewTimer(500 * time.Millisecond)
+	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()
 
 	for {
 		select {
 		case <-timer.C:
+			// Try to get container logs before returning timeout error
+			cli, err := testcontainers.NewDockerClient()
+			if err == nil {
+				reader, err := cli.ContainerLogs(context.Background(), "reth", container.LogsOptions{
+					ShowStdout: true,
+					ShowStderr: true,
+					Follow:     false,
+				})
+				if err == nil {
+					defer reader.Close()
+					logs, err := io.ReadAll(reader)
+					if err == nil {
+						t.Logf("Container logs:\n%s", string(logs))
+					}
+				}
+			}
 			return fmt.Errorf("timeout waiting for reth container to be ready")
 		default:
 			// check :8545 is ready

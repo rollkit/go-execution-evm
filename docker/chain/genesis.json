@@ -11,9 +11,19 @@
     "istanbulBlock": 0,
     "berlinBlock": 0,
     "londonBlock": 0,
-    "shanghaiTime": 1677557088,
-    "cancunTime": 1710338100 
+    "mergeNetsplitBlock": 0,
+    "terminalTotalDifficulty": 0,
+    "terminalTotalDifficultyPassed": true,
+    "shanghaiTime": 0,
+    "cancunTime": 0
   },
+  "nonce": "0x0",
+  "timestamp": "0x0",
+  "extraData": "0x",
+  "gasLimit": "0x1c9c380",
+  "difficulty": "0x0",
+  "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "coinbase": "0x0000000000000000000000000000000000000000",
   "alloc": {
     "0xd143C405751162d0F96bEE2eB5eb9C61882a736E": {
       "balance": "0x4a47e3c12448f4ad000000"
@@ -22,12 +32,8 @@
       "balance": "0x4a47e3c12448f4ad000000"
     }
   },
-  "coinbase": "0x0000000000000000000000000000000000000000",
-  "difficulty": "0x20000",
-  "extraData": "",
-  "gasLimit": "0xf4240",
-  "nonce": "0x0000000000000042",
-  "mixhash": "0x2c85bcbce56429100b2108254bb56906257582aeafcbd682bc9af67a9f5aee46",
+  "number": "0x0",
+  "gasUsed": "0x0",
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "timestamp": "0x00"
+  "baseFeePerGas": "0x3b9aca00"
 }

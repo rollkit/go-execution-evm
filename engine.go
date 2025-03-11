@@ -1,17 +1,19 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"net/http"
+	"time"
+
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	execution_types "github.com/rollkit/go-execution/types"
-	"math/big"
-	"net/http"
-	"time"
 )
 
 type PureEngineClient struct {
@@ -70,6 +72,7 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
+	fmt.Printf("tzdybal: %+v\n", forkchoiceResult)
 	//
 	//// Retrieve the Genesis Execution Payload
 	//// Ensures the execution client recognizes the genesis block.
@@ -91,8 +94,8 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 			FinalizedBlockHash: c.genesisHash,
 		},
 		engine.PayloadAttributes{
-			Timestamp:             uint64(time.Now().Unix()), //nolint:gosec // disable G115
-			Random:                common.Hash{},             // TODO(tzdybal): this probably shouldn't be 0
+			Timestamp:             uint64(genesisTime.Unix()), //nolint:gosec // disable G115
+			Random:                common.Hash{},              // TODO(tzdybal): this probably shouldn't be 0
 			SuggestedFeeRecipient: c.feeRecipient,
 			BeaconRoot:            &c.genesisHash,
 			Withdrawals:           []*types.Withdrawal{},
@@ -101,6 +104,8 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
+
+	fmt.Printf("tzdybal: %+v\n", forkchoiceResult2)
 
 	if forkchoiceResult2.PayloadID == nil {
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
@@ -145,6 +150,20 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, er
 	jsonPayloadResult, err := json.Marshal(payloadResult)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize payloadResult: %w", err)
+	}
+
+	var newPayloadResult engine.ExecutionPayloadEnvelope
+	err = json.Unmarshal(jsonPayloadResult, &newPayloadResult)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal payloadResult: %w", err)
+	}
+
+	jsonPayloadResult2, err := json.Marshal(payloadResult)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize payloadResult: %w", err)
+	}
+	if !bytes.Equal(jsonPayloadResult, jsonPayloadResult2) {
+		return nil, fmt.Errorf("payloadResult has changed")
 	}
 
 	txs := make([]execution_types.Tx, len(payloadResult.ExecutionPayload.Transactions)+1)
@@ -199,6 +218,9 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types
 	if err != nil {
 		return nil, 0, fmt.Errorf("forkchoice update failed with error: %w", err)
 	}
+
+	// Pretty print the fork choice result
+	fmt.Printf("Fork Choice Result: %+v\n", forkchoiceResult)
 
 	if forkchoiceResult.PayloadStatus.Status == engine.INVALID {
 		return nil, 0, ErrInvalidPayloadStatus
