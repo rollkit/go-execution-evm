@@ -22,7 +22,6 @@ type PureEngineClient struct {
 	genesisHash  common.Hash
 	feeRecipient common.Address
 	payloadID    *engine.PayloadID
-	building     bool
 }
 
 // NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
@@ -68,6 +67,7 @@ func NewPureEngineExecutionClient(
 }
 
 func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
+	// Acknowledge the genesis block
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
@@ -120,7 +120,6 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, er
 	if err != nil {
 		return nil, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
 	}
-	c.building = true
 
 	jsonPayloadResult, err := json.Marshal(payloadResult)
 	if err != nil {
@@ -155,7 +154,7 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types
 		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed: %w", err)
 	}
 
-	if newPayloadResult.Status == engine.INVALID {
+	if newPayloadResult.Status != engine.VALID {
 		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed with: %s", *newPayloadResult.ValidationError)
 	}
 
@@ -180,7 +179,7 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types
 		return nil, 0, fmt.Errorf("forkchoice update failed with error: %w", err)
 	}
 
-	if forkchoiceResult.PayloadStatus.Status == engine.INVALID {
+	if forkchoiceResult.PayloadStatus.Status != engine.VALID {
 		return nil, 0, ErrInvalidPayloadStatus
 	}
 
