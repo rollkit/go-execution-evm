@@ -2,9 +2,6 @@ package execution
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,9 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rollkit/go-execution/types"
 	"github.com/stretchr/testify/require"
-
-	"github.com/docker/docker/pkg/archive"
-	"github.com/testcontainers/testcontainers-go"
 )
 
 // createEthClient creates an Ethereum client for checking block information
@@ -55,8 +49,6 @@ func checkLatestBlock(t *testing.T, ctx context.Context) (uint64, common.Hash, i
 		return blockNumber, blockHash, 0
 	}
 
-	fmt.Printf("tzdybal: %+v\n%+v\n", block, block.Header())
-
 	txCount := len(block.Transactions())
 
 	//t.Logf("Latest block: height=%d, hash=%s, txs=%d", blockNumber, blockHash.Hex(), txCount)
@@ -91,6 +83,7 @@ func TestEngineExecution(t *testing.T) {
 		require.NotZero(t, gasLimit)
 
 		prevStateRoot := rollkitGenesisStateRoot
+		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
 
 		for blockHeight := initialHeight + 1; blockHeight <= 10; blockHeight++ {
 			nTxs := int(blockHeight) + 10
@@ -105,28 +98,29 @@ func TestEngineExecution(t *testing.T) {
 			for i := range txs {
 				submitTransaction(t, txs[i])
 			}
-			time.Sleep(1500 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 
 			payload, err := executionClient.GetTxs(ctx)
 			require.NoError(tt, err)
-			fmt.Println("Len:", len(payload))
 			require.Len(tt, payload, nTxs+1)
 
 			allPayloads = append(allPayloads, payload)
 
-			fmt.Println(common.Bytes2Hex(prevStateRoot))
-
 			// Check latest block before execution
 			beforeHeight, beforeHash, beforeTxs := checkLatestBlock(tt, ctx)
-			tt.Logf("Before ExecuteTxs (height %d): Latest block height=%d, hash=%s, txs=%d", blockHeight, beforeHeight, beforeHash.Hex(), beforeTxs)
+			require.Equal(tt, lastHeight, beforeHeight, "Latest block height should match")
+			require.Equal(tt, lastHash.Hex(), beforeHash.Hex(), "Latest block hash should match")
+			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
 
 			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
 			require.NoError(tt, err)
 			require.NotZero(tt, maxBytes)
 
 			// Check latest block after execution
-			afterHeight, afterHash, afterTxs := checkLatestBlock(tt, ctx)
-			tt.Logf("After ExecuteTxs (height %d): Latest block height=%d, hash=%s, txs=%d", blockHeight, afterHeight, afterHash.Hex(), afterTxs)
+			lastHeight, lastHash, lastTxs = checkLatestBlock(tt, ctx)
+			require.Equal(tt, blockHeight, lastHeight, "Latest block height should match")
+			require.NotEmpty(tt, lastHash.Hex(), "Latest block hash should not be empty")
+			require.GreaterOrEqual(tt, lastTxs, 0, "Number of transactions should be non-negative")
 
 			if nTxs == 0 {
 				require.Equal(tt, prevStateRoot, newStateRoot)
@@ -155,56 +149,28 @@ func TestEngineExecution(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, rollkitGenesisStateRoot, stateRoot)
 		require.NotZero(t, gasLimit)
-		//trash, err := executionClient.GetTxs(ctx)
-		//require.NoError(t, err)
-		//require.Len(t, trash, 1)
 
 		prevStateRoot := rollkitGenesisStateRoot
+		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
 
-		tt.Cleanup(func() {
-			// Create docker client
-			cli, err := testcontainers.NewDockerClient()
-			require.NoError(tt, err)
-
-			// Copy witness directory from container to host
-			reader, _, err := cli.CopyFromContainer(context.Background(), "reth", "/root/.local/share/reth/1234/invalid_block_hooks/witness")
-			require.NoError(tt, err)
-			defer reader.Close()
-
-			// Get current user's home directory
-			homeDir, err := os.UserHomeDir()
-			require.NoError(tt, err)
-			destDir := filepath.Join(homeDir, "witness")
-
-			// Create destination directory with current user permissions
-			err = os.MkdirAll(destDir, 0755)
-			require.NoError(tt, err)
-
-			// Extract tar archive to destination with current user permissions
-			err = archive.Untar(reader, destDir, &archive.TarOptions{
-				NoLchown: true, // Don't try to change ownership
-			})
-			require.NoError(tt, err)
-		})
-
-		// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-		// WARNING - the first payload is skipped - it would throw state root mismatch for whatever reason
-		// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		for blockHeight := initialHeight + 1; blockHeight-initialHeight <= 10; blockHeight++ {
 			payload := allPayloads[blockHeight-initialHeight-1]
-			fmt.Println(common.Bytes2Hex(prevStateRoot))
 
 			// Check latest block before execution
-			beforeHeight, beforeHash, beforeTxs := checkLatestBlock(t, ctx)
-			t.Logf("Before ExecuteTxs (height %d): Latest block height=%d, hash=%s, txs=%d", blockHeight, beforeHeight, beforeHash.Hex(), beforeTxs)
+			beforeHeight, beforeHash, beforeTxs := checkLatestBlock(tt, ctx)
+			require.Equal(tt, lastHeight, beforeHeight, "Latest block height should match")
+			require.Equal(tt, lastHash.Hex(), beforeHash.Hex(), "Latest block hash should match")
+			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
 
 			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
 			require.NoErrorf(tt, err, "blockHeight: %d, nTxs: %d", blockHeight, len(payload)-1)
 			require.NotZero(tt, maxBytes)
 
 			// Check latest block after execution
-			afterHeight, afterHash, afterTxs := checkLatestBlock(t, ctx)
-			t.Logf("After ExecuteTxs (height %d): Latest block height=%d, hash=%s, txs=%d", blockHeight, afterHeight, afterHash.Hex(), afterTxs)
+			lastHeight, lastHash, lastTxs = checkLatestBlock(tt, ctx)
+			require.Equal(tt, blockHeight, lastHeight, "Latest block height should match")
+			require.NotEmpty(tt, lastHash.Hex(), "Latest block hash should not be empty")
+			require.GreaterOrEqual(tt, lastTxs, 0, "Number of transactions should be non-negative")
 
 			if len(payload)-1 == 0 {
 				require.Equal(tt, prevStateRoot, newStateRoot)

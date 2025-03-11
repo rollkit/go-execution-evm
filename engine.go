@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -72,7 +71,6 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 	if err != nil {
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
-	fmt.Printf("tzdybal: %+v\n", forkchoiceResult)
 	//
 	//// Retrieve the Genesis Execution Payload
 	//// Ensures the execution client recognizes the genesis block.
@@ -105,8 +103,6 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
 
-	fmt.Printf("tzdybal: %+v\n", forkchoiceResult2)
-
 	if forkchoiceResult2.PayloadID == nil {
 		return execution_types.Hash{}, 0, ErrNilPayloadStatus
 	}
@@ -116,24 +112,8 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 	const GENESIS_STATEROOT = "0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4"
 	genesisStateRoot := common.HexToHash(GENESIS_STATEROOT)
 
-	//txs, err := c.GetTxs(ctx)
-	//if err != nil {
-	//	return execution_types.Hash{}, 0, fmt.Errorf("failed to get genesis txs: %w", err)
-	//}
-	//_, _, err = c.ExecuteTxs(ctx, txs, initialHeight, genesisTime, c.genesisHash[:])
-	//if err != nil {
-	//	return execution_types.Hash{}, 0, fmt.Errorf("failed to execute genesis txs: %w", err)
-	//}
-
-	//var payloadResult engine.ExecutionPayloadEnvelope
-	//err = c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", forkchoiceResult2.PayloadID)
-	//if err != nil {
-	//	return execution_types.Hash{}, 0, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
-	//}
-	//stateRoot := payloadResult.ExecutionPayload.StateRoot
-	//gasLimit := payloadResult.ExecutionPayload.GasLimit
-	//fmt.Println("tzdybal:", payloadResult.ExecutionPayload.BlockHash.Hex())
-	//fmt.Println("tzdybal:", c.genesisHash.Hex())
+	//stateRoot := payloadResult2.ExecutionPayload.StateRoot
+	//gasLimit := payloadResult2.ExecutionPayload.GasLimit
 
 	//return stateRoot[:], gasLimit, nil
 	return genesisStateRoot[:], 600000000, nil
@@ -150,20 +130,6 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, er
 	jsonPayloadResult, err := json.Marshal(payloadResult)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize payloadResult: %w", err)
-	}
-
-	var newPayloadResult engine.ExecutionPayloadEnvelope
-	err = json.Unmarshal(jsonPayloadResult, &newPayloadResult)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal payloadResult: %w", err)
-	}
-
-	jsonPayloadResult2, err := json.Marshal(payloadResult)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize payloadResult: %w", err)
-	}
-	if !bytes.Equal(jsonPayloadResult, jsonPayloadResult2) {
-		return nil, fmt.Errorf("payloadResult has changed")
 	}
 
 	txs := make([]execution_types.Tx, len(payloadResult.ExecutionPayload.Transactions)+1)
@@ -218,9 +184,6 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types
 	if err != nil {
 		return nil, 0, fmt.Errorf("forkchoice update failed with error: %w", err)
 	}
-
-	// Pretty print the fork choice result
-	fmt.Printf("Fork Choice Result: %+v\n", forkchoiceResult)
 
 	if forkchoiceResult.PayloadStatus.Status == engine.INVALID {
 		return nil, 0, ErrInvalidPayloadStatus
