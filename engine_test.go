@@ -68,6 +68,7 @@ func TestEngineExecution(t *testing.T) {
 		jwtSecret := setupTestRethEngine(tt)
 
 		executionClient, err := NewPureEngineExecutionClient(
+			TEST_ETH_URL,
 			TEST_ENGINE_URL,
 			jwtSecret,
 			genesisHash,
@@ -116,6 +117,9 @@ func TestEngineExecution(t *testing.T) {
 			require.NoError(tt, err)
 			require.NotZero(tt, maxBytes)
 
+			err = executionClient.SetFinal(ctx, blockHeight)
+			require.NoError(tt, err)
+
 			// Check latest block after execution
 			lastHeight, lastHash, lastTxs = checkLatestBlock(tt, ctx)
 			require.Equal(tt, blockHeight, lastHeight, "Latest block height should match")
@@ -136,6 +140,7 @@ func TestEngineExecution(t *testing.T) {
 		jwtSecret := setupTestRethEngine(t)
 
 		executionClient, err := NewPureEngineExecutionClient(
+			TEST_ETH_URL,
 			TEST_ENGINE_URL,
 			jwtSecret,
 			genesisHash,
@@ -165,6 +170,9 @@ func TestEngineExecution(t *testing.T) {
 			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
 			require.NoErrorf(tt, err, "blockHeight: %d, nTxs: %d", blockHeight, len(payload)-1)
 			require.NotZero(tt, maxBytes)
+
+			err = executionClient.SetFinal(ctx, blockHeight)
+			require.NoError(tt, err)
 
 			// Check latest block after execution
 			lastHeight, lastHash, lastTxs = checkLatestBlock(tt, ctx)

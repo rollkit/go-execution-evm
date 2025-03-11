@@ -244,9 +244,9 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 	var forkchoiceResult engine.ForkChoiceResponse
 	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
-			HeadBlockHash:      prevBlockHash,
-			SafeBlockHash:      prevBlockHash,
-			FinalizedBlockHash: prevBlockHash,
+			HeadBlockHash: prevBlockHash,
+			SafeBlockHash: prevBlockHash,
+			// FinalizedBlockHash: prevBlockHash,
 		},
 		&engine.PayloadAttributes{
 			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115

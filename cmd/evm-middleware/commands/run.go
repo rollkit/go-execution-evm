@@ -55,7 +55,7 @@ var runCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		listener, err := net.Listen("tcp", listenAddress)
 		if err != nil {
-			return fmt.Errorf("error while creating listener: %w\n", err)
+			return fmt.Errorf("error while creating listener: %w", err)
 		}
 		defer func() {
 			_ = listener.Close()
@@ -63,7 +63,7 @@ var runCmd = &cobra.Command{
 
 		genesisHash := common.HexToHash(genesisHashHex)
 
-		evmClient, err := evm.NewPureEngineExecutionClient(engineURL, jwtSecret, genesisHash, common.Address{})
+		evmClient, err := evm.NewPureEngineExecutionClient(ethURL, engineURL, jwtSecret, genesisHash, common.Address{})
 		if err != nil {
 			return fmt.Errorf("failed to create Engine API client middleware: %w", err)
 		}
