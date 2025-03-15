@@ -6,15 +6,41 @@ This repository implements the `execution.Executor` interface from `github.com/r
 
 The `PureEngineClient` is a 100% Engine API compatible implementation of the `execution.Executor` interface. It connects to an Ethereum execution client (like Reth) and uses both the Engine API and standard Ethereum JSON-RPC API to execute transactions.
 
-### How Eth API is Used
+### Genesis Requirements
 
-The `PureEngineClient` uses the standard Ethereum JSON-RPC API for:
+Since the `PureEngineClient` relies on the Engine API, the genesis configuration must properly enable it with the correct hardfork settings:
 
-1. Retrieving block information (via `HeaderByNumber`)
-2. Reading the genesis block hash and state root
-3. Getting gas limits and other block parameters
+1. The genesis file must include post-merge hardfork configurations
+2. `terminalTotalDifficulty` must be set to 0
+3. `terminalTotalDifficultyPassed` must be set to true
+4. Hardforks like `mergeNetsplitBlock`, `shanghaiTime`, and `cancunTime` should be properly configured
 
-This allows the client to interact with the execution layer for read operations while using the Engine API for write operations.
+Example of required genesis configuration:
+
+```json
+{
+  "config": {
+    "chainId": 1234,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "mergeNetsplitBlock": 0,
+    "terminalTotalDifficulty": 0,
+    "terminalTotalDifficultyPassed": true,
+    "shanghaiTime": 0,
+    "cancunTime": 0
+  }
+}
+```
+
+Without these settings, the Engine API will not be available, and the `PureEngineClient` will not function correctly.
 
 ### PayloadID Storage
 
@@ -40,6 +66,16 @@ This approach ensures that:
 - All execution happens within the EVM
 - It's not possible to create a payload outside of the EVM
 - Transactions cannot be selected or ordered outside of the EVM
+
+### How Eth API is Used
+
+The `PureEngineClient` uses the standard Ethereum JSON-RPC API for:
+
+1. Retrieving block information (via `HeaderByNumber`)
+2. Reading the genesis block hash and state root
+3. Getting gas limits and other block parameters
+
+This allows the client to interact with the execution layer for read operations while using the Engine API for write operations.
 
 ## Deployment Architecture
 
