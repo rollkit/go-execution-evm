@@ -115,7 +115,7 @@ func TestEngineExecution(t *testing.T) {
 			require.Equal(tt, lastHash.Hex(), beforeHash.Hex(), "Latest block hash should match")
 			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
 
-			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
+			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, time.Now(), prevStateRoot)
 			require.NoError(tt, err)
 			require.NotZero(tt, maxBytes)
 
@@ -169,7 +169,7 @@ func TestEngineExecution(t *testing.T) {
 			require.Equal(tt, lastHash.Hex(), beforeHash.Hex(), "Latest block hash should match")
 			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
 
-			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, genesisTime, prevStateRoot)
+			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, time.Now(), prevStateRoot)
 			require.NoErrorf(tt, err, "blockHeight: %d, nTxs: %d", blockHeight, len(payload)-1)
 			require.NotZero(tt, maxBytes)
 

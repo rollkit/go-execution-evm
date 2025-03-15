@@ -203,7 +203,7 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHe
 			// FinalizedBlockHash: blockHash,
 		},
 		&engine.PayloadAttributes{
-			Timestamp:             uint64(time.Now().Unix()), //nolint:gosec // disable G115
+			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115
 			Random:                c.derivePrevRandao(blockHeight),
 			SuggestedFeeRecipient: c.feeRecipient,
 			BeaconRoot:            &c.genesisHash,
