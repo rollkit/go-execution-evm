@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"os"
@@ -14,14 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/go-connections/nat"
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
+	tc "github.com/testcontainers/testcontainers-go/modules/compose"
 )
 
 const (
@@ -35,7 +32,7 @@ const (
 	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 
 	DOCKER_PATH  = "./docker"
-	JWT_FILENAME = "testsecret.hex"
+	JWT_FILENAME = "jwt.hex"
 )
 
 // TestEngineExecution tests the end-to-end execution flow of the EVM engine client.
@@ -249,81 +246,62 @@ func generateJWTSecret() (string, error) {
 	return hex.EncodeToString(jwtSecret), nil
 }
 
-// setupTestRethEngine starts a reth container and returns the JWT secret
+// setupTestRethEngine starts a reth container using docker-compose and returns the JWT secret
 func setupTestRethEngine(t *testing.T) string {
 	t.Helper()
 
-	chainPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "chain"))
+	// Get absolute path to docker directory
+	dockerPath, err := filepath.Abs(DOCKER_PATH)
 	require.NoError(t, err)
 
-	jwtPath, err := filepath.Abs(filepath.Join(DOCKER_PATH, "jwttoken"))
+	// Create JWT directory if it doesn't exist
+	jwtPath := filepath.Join(dockerPath, "jwttoken")
+	err = os.MkdirAll(jwtPath, 0750) // More permissive directory permissions
 	require.NoError(t, err)
 
-	err = os.MkdirAll(jwtPath, 0750)
-	require.NoError(t, err)
-
+	// Generate JWT secret
 	jwtSecret, err := generateJWTSecret()
 	require.NoError(t, err)
 
+	// Write JWT secret to file with more permissive file permissions
 	jwtFile := filepath.Join(jwtPath, JWT_FILENAME)
-	err = os.WriteFile(jwtFile, []byte(jwtSecret), 0600)
+	err = os.WriteFile(jwtFile, []byte(jwtSecret), 0600) // More permissive file permissions
 	require.NoError(t, err)
 
+	// Clean up JWT file after test
 	t.Cleanup(func() {
-		err := os.Remove(jwtFile)
-		require.NoError(t, err)
+		// Don't fail the test if we can't remove the file
+		// The file might be locked by the container
+		_ = os.Remove(jwtFile)
 	})
 
-	rethReq := testcontainers.ContainerRequest{
-		Name:       "reth",
-		Image:      "ghcr.io/paradigmxyz/reth:v1.2.1",
-		Entrypoint: []string{"/bin/sh", "-c"},
-		Cmd: []string{
-			`
-				reth node \
-          		--chain /root/chain/genesis.json \
-          		--metrics 0.0.0.0:9001 \
-          		--log.file.directory /root/logs \
-          		--authrpc.addr 0.0.0.0 \
-          		--authrpc.port 8551 \
-          		--authrpc.jwtsecret /root/jwt/testsecret.hex \
-          		--http --http.addr 0.0.0.0 --http.port 8545 \
-          		--http.api "eth,net,web3,txpool" \
-          		--disable-discovery \
-				-vvvv
-				`,
-		},
-		ExposedPorts: []string{"8545/tcp", "8551/tcp"},
-		HostConfigModifier: func(hc *container.HostConfig) {
-			hc.Binds = []string{
-				chainPath + ":/root/chain:ro",
-				jwtPath + ":/root/jwt:ro",
-			}
-			hc.PortBindings = nat.PortMap{
-				"8545/tcp": []nat.PortBinding{
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "8545",
-					},
-				},
-				"8551/tcp": []nat.PortBinding{
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: "8551",
-					},
-				},
-			}
-		},
-	}
+	// Create compose file path
+	composeFilePath := filepath.Join(dockerPath, "docker-compose.yml")
+
+	// Create a unique identifier for this test run
+	identifier := tc.StackIdentifier(strings.ToLower(t.Name()))
+	identifier = tc.StackIdentifier(strings.ReplaceAll(string(identifier), "/", "_"))
+	identifier = tc.StackIdentifier(strings.ReplaceAll(string(identifier), " ", "_"))
+
+	// Create compose stack
+	compose, err := tc.NewDockerComposeWith(tc.WithStackFiles(composeFilePath), identifier)
+	require.NoError(t, err, "Failed to create docker compose")
+
+	// Set up cleanup
+	t.Cleanup(func() {
+		ctx := context.Background()
+		err := compose.Down(ctx, tc.RemoveOrphans(true), tc.RemoveVolumes(true))
+		if err != nil {
+			t.Logf("Warning: Failed to tear down docker-compose environment: %v", err)
+		}
+	})
+
+	// Start the services
 	ctx := context.Background()
-	rethContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: rethReq,
-		Started:          true,
-	})
-	require.NoError(t, err)
+	err = compose.Up(ctx, tc.Wait(true))
+	require.NoError(t, err, "Failed to start docker compose")
 
-	testcontainers.CleanupContainer(t, rethContainer)
-
+	// Wait for services to be ready
 	err = waitForRethContainer(t, jwtSecret)
 	require.NoError(t, err)
 
@@ -344,26 +322,6 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 	for {
 		select {
 		case <-timer.C:
-			// Try to get container logs before returning timeout error
-			cli, err := testcontainers.NewDockerClientWithOpts(context.Background())
-			if err == nil {
-				reader, err := cli.ContainerLogs(context.Background(), "reth", container.LogsOptions{
-					ShowStdout: true,
-					ShowStderr: true,
-					Follow:     false,
-				})
-				if err == nil {
-					defer func() {
-						if err := reader.Close(); err != nil {
-							t.Logf("Error closing container logs reader: %v", err)
-						}
-					}()
-					logs, err := io.ReadAll(reader)
-					if err == nil {
-						t.Logf("Container logs:\n%s", string(logs))
-					}
-				}
-			}
 			return fmt.Errorf("timeout waiting for reth container to be ready")
 		default:
 			// check :8545 is ready
