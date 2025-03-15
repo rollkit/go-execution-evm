@@ -345,7 +345,7 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 		select {
 		case <-timer.C:
 			// Try to get container logs before returning timeout error
-			cli, err := testcontainers.NewDockerClient()
+			cli, err := testcontainers.NewDockerClientWithOpts(context.Background())
 			if err == nil {
 				reader, err := cli.ContainerLogs(context.Background(), "reth", container.LogsOptions{
 					ShowStdout: true,
@@ -353,7 +353,11 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 					Follow:     false,
 				})
 				if err == nil {
-					defer reader.Close()
+					defer func() {
+						if err := reader.Close(); err != nil {
+							t.Logf("Error closing container logs reader: %v", err)
+						}
+					}()
 					logs, err := io.ReadAll(reader)
 					if err == nil {
 						t.Logf("Container logs:\n%s", string(logs))

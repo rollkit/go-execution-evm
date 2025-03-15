@@ -42,7 +42,7 @@ type PureEngineClient struct {
 	payloadID    *engine.PayloadID // ID of the current execution payload being processed
 }
 
-// NewEngineAPIExecutionClient creates a new instance of EngineAPIExecutionClient
+// NewPureEngineExecutionClient creates a new instance of EngineAPIExecutionClient
 func NewPureEngineExecutionClient(
 	ethURL,
 	engineURL string,
@@ -84,6 +84,7 @@ func NewPureEngineExecutionClient(
 	}, nil
 }
 
+// InitChain initializes the blockchain with the given genesis parameters
 func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
 	// Acknowledge the genesis block
 	var forkchoiceResult engine.ForkChoiceResponse
@@ -132,6 +133,7 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 	return stateRoot[:], gasLimit, nil
 }
 
+// GetTxs retrieves transactions from the current execution payload
 func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
 	var payloadResult engine.ExecutionPayloadEnvelope
 	err := c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", c.payloadID)
@@ -160,6 +162,7 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
 	return txs, nil
 }
 
+// ExecuteTxs executes the given transactions at the specified block height and timestamp
 func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) (updatedStateRoot []byte, maxBytes uint64, err error) {
 	var payloadResult engine.ExecutionPayloadEnvelope
 	// First tx is the serialized payload
@@ -220,6 +223,7 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHe
 	return payloadResult.ExecutionPayload.StateRoot.Bytes(), payloadResult.ExecutionPayload.GasLimit, nil
 }
 
+// SetFinal marks the block at the given height as finalized
 func (c *PureEngineClient) SetFinal(ctx context.Context, blockHeight uint64) error {
 	blockHash, _, _, err := c.getBlockInfo(ctx, blockHeight)
 	if err != nil {
@@ -247,17 +251,19 @@ func (c *PureEngineClient) SetFinal(ctx context.Context, blockHeight uint64) err
 }
 
 func (c *PureEngineClient) derivePrevRandao(blockHeight uint64) common.Hash {
-	return common.BigToHash(big.NewInt(int64(blockHeight))) //nolint:gosec // disable G115
+	return common.BigToHash(new(big.Int).SetUint64(blockHeight))
 }
 
 func (c *PureEngineClient) getBlockInfo(ctx context.Context, height uint64) (common.Hash, common.Hash, uint64, error) {
-	header, err := c.ethClient.HeaderByNumber(ctx, big.NewInt(int64(height)))
+	header, err := c.ethClient.HeaderByNumber(ctx, new(big.Int).SetUint64(height))
+
 	if err != nil {
 		return common.Hash{}, common.Hash{}, 0, fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
 
 	return header.Hash(), header.Root, header.GasLimit, nil
 }
+
 func decodeSecret(jwtSecret string) ([]byte, error) {
 	secret, err := hex.DecodeString(strings.TrimPrefix(jwtSecret, "0x"))
 	if err != nil {
