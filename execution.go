@@ -18,8 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/golang-jwt/jwt/v5"
 
-	execution "github.com/rollkit/go-execution"
-	execution_types "github.com/rollkit/go-execution/types"
+	"github.com/rollkit/rollkit/core/execution"
 )
 
 var (
@@ -85,7 +84,7 @@ func NewPureEngineExecutionClient(
 	}, nil
 }
 
-func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (execution_types.Hash, uint64, error) {
+func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
 	// Acknowledge the genesis block
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
@@ -97,7 +96,7 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 		nil,
 	)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
+		return nil, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
 
 	// Start building the first block
@@ -116,24 +115,24 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 		},
 	)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
+		return nil, 0, fmt.Errorf("engine_forkchoiceUpdatedV3 failed: %w", err)
 	}
 
 	if forkchoiceResult.PayloadID == nil {
-		return execution_types.Hash{}, 0, ErrNilPayloadStatus
+		return nil, 0, ErrNilPayloadStatus
 	}
 
 	c.payloadID = forkchoiceResult.PayloadID
 
 	_, stateRoot, gasLimit, err := c.getBlockInfo(ctx, 0)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("failed to get genesis block info: %w", err)
+		return nil, 0, fmt.Errorf("failed to get genesis block info: %w", err)
 	}
 
 	return stateRoot[:], gasLimit, nil
 }
 
-func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, error) {
+func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
 	var payloadResult engine.ExecutionPayloadEnvelope
 	err := c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", c.payloadID)
 	if err != nil {
@@ -152,7 +151,7 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, er
 	}
 
 	// Create the result with serialized payload as first tx, followed by original transactions
-	txs := make([]execution_types.Tx, len(originalTxs)+1)
+	txs := make([][]byte, len(originalTxs)+1)
 	txs[0] = jsonPayloadResult
 	for i, tx := range originalTxs {
 		txs[i+1] = tx
@@ -161,13 +160,13 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([]execution_types.Tx, er
 	return txs, nil
 }
 
-func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types.Tx, blockHeight uint64, timestamp time.Time, prevStateRoot execution_types.Hash) (updatedStateRoot execution_types.Hash, maxBytes uint64, err error) {
+func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) (updatedStateRoot []byte, maxBytes uint64, err error) {
 	var payloadResult engine.ExecutionPayloadEnvelope
 	// First tx is the serialized payload
 	firstTx := txs[0]
 	err = json.Unmarshal(firstTx, &payloadResult)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("failed to deserialize first transaction as ExecutionPayload: %w", err)
+		return nil, 0, fmt.Errorf("failed to deserialize first transaction as ExecutionPayload: %w", err)
 	}
 
 	// Add transactions from txs to the payload (skip the first one which is the payload itself)
@@ -184,11 +183,11 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs []execution_types
 	)
 
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed: %w", err)
+		return nil, 0, fmt.Errorf("new payload submission failed: %w", err)
 	}
 
 	if newPayloadResult.Status != engine.VALID {
-		return execution_types.Hash{}, 0, fmt.Errorf("new payload submission failed with: %s", *newPayloadResult.ValidationError)
+		return nil, 0, fmt.Errorf("new payload submission failed with: %s", *newPayloadResult.ValidationError)
 	}
 
 	// forkchoice update
