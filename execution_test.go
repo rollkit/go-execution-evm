@@ -367,6 +367,28 @@ func waitForRethContainer(t *testing.T, jwtSecret string) error {
 	}
 }
 
+func TestSubmitTransaction(t *testing.T) {
+	t.Skip("Use this test to submit a transaction manually to the Ethereum client")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
+	require.NoError(t, err)
+	height, err := rpcClient.BlockNumber(ctx)
+	require.NoError(t, err)
+
+	privateKey, err := crypto.HexToECDSA(TEST_PRIVATE_KEY)
+	require.NoError(t, err)
+
+	address := crypto.PubkeyToAddress(privateKey.PublicKey)
+	lastNonce, err = rpcClient.NonceAt(ctx, address, new(big.Int).SetUint64(height))
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		tx := getRandomTransaction(t, 22000)
+		submitTransaction(t, tx)
+	}
+}
+
 // submitTransaction submits a signed transaction to the Ethereum client
 func submitTransaction(t *testing.T, signedTx *ethTypes.Transaction) {
 	rpcClient, err := ethclient.Dial(TEST_ETH_URL)
