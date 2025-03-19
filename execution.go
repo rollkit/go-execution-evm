@@ -144,6 +144,42 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 
 // GetTxs retrieves transactions from the current execution payload
 func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
+	if c.payloadID == nil { // this happens when rollkit is restarted
+		latestHeight, err := c.ethClient.BlockNumber(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get latest block height: %w", err)
+		}
+		block, err := c.ethClient.BlockByNumber(ctx, new(big.Int).SetUint64(latestHeight))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get latest block: %w", err)
+		}
+		blockHash := block.Hash()
+		timestamp := block.Time() + 1
+		var forkchoiceResult engine.ForkChoiceResponse
+		err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
+			engine.ForkchoiceStateV1{
+				HeadBlockHash: blockHash,
+				SafeBlockHash: blockHash,
+				// FinalizedBlockHash: blockHash,
+			},
+			&engine.PayloadAttributes{
+				Timestamp:             timestamp,
+				Random:                c.derivePrevRandao(latestHeight + 1),
+				SuggestedFeeRecipient: c.feeRecipient,
+				BeaconRoot:            &c.genesisHash,
+				Withdrawals:           []*types.Withdrawal{},
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("forkchoice update failed with error: %w", err)
+		}
+
+		if forkchoiceResult.PayloadStatus.Status != engine.VALID {
+			return nil, ErrInvalidPayloadStatus
+		}
+
+		c.payloadID = forkchoiceResult.PayloadID
+	}
 	var payloadResult engine.ExecutionPayloadEnvelope
 	err := c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", c.payloadID)
 	c.payloadID = nil
