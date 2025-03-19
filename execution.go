@@ -86,6 +86,10 @@ func NewPureEngineExecutionClient(
 
 // InitChain initializes the blockchain with the given genesis parameters
 func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
+	if initialHeight != 1 {
+		return nil, 0, fmt.Errorf("initialHeight must be 1, got %d", initialHeight)
+	}
+
 	// Acknowledge the genesis block
 	var forkchoiceResult engine.ForkChoiceResponse
 	err := c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
@@ -108,8 +112,8 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 			FinalizedBlockHash: c.genesisHash,
 		},
 		engine.PayloadAttributes{
-			Timestamp:             uint64(genesisTime.Unix()), //nolint:gosec // disable G115
-			Random:                common.Hash{},              // TODO(tzdybal): this probably shouldn't be 0
+			Timestamp:             uint64(genesisTime.Add(-1 * time.Second).Unix()), //nolint:gosec // disable G115
+			Random:                common.Hash{},                                    // TODO(tzdybal): this probably shouldn't be 0
 			SuggestedFeeRecipient: c.feeRecipient,
 			BeaconRoot:            &c.genesisHash,
 			Withdrawals:           []*types.Withdrawal{},
@@ -125,18 +129,24 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 
 	c.payloadID = forkchoiceResult.PayloadID
 
-	_, stateRoot, gasLimit, err := c.getBlockInfo(ctx, 0)
+	_, stateRoot, _, err := c.getBlockInfo(ctx, 0)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get genesis block info: %w", err)
 	}
 
-	return stateRoot[:], gasLimit, nil
+	// for rollkit compatibility, create one empty block
+	payload, err := c.GetTxs(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get txs: %w", err)
+	}
+	return c.ExecuteTxs(ctx, payload, 1, genesisTime, stateRoot[:])
 }
 
 // GetTxs retrieves transactions from the current execution payload
 func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
 	var payloadResult engine.ExecutionPayloadEnvelope
 	err := c.engineClient.CallContext(ctx, &payloadResult, "engine_getPayloadV3", c.payloadID)
+	c.payloadID = nil
 	if err != nil {
 		return nil, fmt.Errorf("engine_getPayloadV3 failed: %w", err)
 	}
@@ -164,6 +174,11 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
 
 // ExecuteTxs executes the given transactions at the specified block height and timestamp
 func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) (updatedStateRoot []byte, maxBytes uint64, err error) {
+	// special handling of block 1 (rollkit expects this to be genesis block)
+	if blockHeight == 1 && len(txs) == 0 {
+		_, stateRoot, gasLimit, err := c.getBlockInfo(ctx, blockHeight)
+		return stateRoot[:], gasLimit, err
+	}
 	var payloadResult engine.ExecutionPayloadEnvelope
 	// First tx is the serialized payload
 	firstTx := txs[0]

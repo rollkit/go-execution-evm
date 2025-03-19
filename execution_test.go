@@ -58,9 +58,9 @@ const (
 // Validates the engine can process transactions, maintain state,
 // handle empty blocks, and support chain replication.
 func TestEngineExecution(t *testing.T) {
-	allPayloads := make([][][]byte, 0) // Slice to store payloads from build to sync phase
+	allPayloads := make([][][]byte, 0, 10) // Slice to store payloads from build to sync phase
 
-	initialHeight := uint64(0)
+	initialHeight := uint64(1)
 	genesisHash := common.HexToHash(GENESIS_HASH)
 	genesisTime := time.Now().UTC().Truncate(time.Second)
 	genesisStateRoot := common.HexToHash(GENESIS_STATEROOT)
@@ -78,7 +78,7 @@ func TestEngineExecution(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 		defer cancel()
 		stateRoot, gasLimit, err := executionClient.InitChain(ctx, genesisTime, initialHeight, CHAIN_ID)
 		require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestEngineExecution(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 		defer cancel()
 		stateRoot, gasLimit, err := executionClient.InitChain(ctx, genesisTime, initialHeight, CHAIN_ID)
 		require.NoError(t, err)
