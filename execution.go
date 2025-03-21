@@ -251,7 +251,6 @@ func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHe
 		engine.ForkchoiceStateV1{
 			HeadBlockHash: blockHash,
 			SafeBlockHash: blockHash,
-			// FinalizedBlockHash: blockHash,
 		},
 		&engine.PayloadAttributes{
 			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115

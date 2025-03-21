@@ -7,6 +7,7 @@ This repository implements the `execution.Executor` interface from `github.com/r
 The `PureEngineClient` is a 100% Engine API compatible implementation of the `execution.Executor` interface. It connects to an Ethereum execution client (like Reth) and uses both the Engine API and standard Ethereum JSON-RPC API to execute transactions.
 
 ### Genesis and initial height
+
 In the context of the EVM, the genesis block is designated as a unique block with the block number `0`.
 To ensure compatibility with both rollkit and the EVM, the only permissible initial height is `1`.
 During `InitChain` EVM genesis block is acknowledged (at height 0), and empty block is created (at height 1).
