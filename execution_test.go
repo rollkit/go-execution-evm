@@ -160,7 +160,7 @@ func TestEngineExecution(t *testing.T) {
 		prevStateRoot := rollkitGenesisStateRoot
 		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
 
-		for blockHeight := initialHeight + 1; blockHeight-initialHeight <= 10; blockHeight++ {
+		for blockHeight := initialHeight + 1; blockHeight <= 10; blockHeight++ {
 			payload := allPayloads[blockHeight-initialHeight-1]
 
 			// Check latest block before execution
