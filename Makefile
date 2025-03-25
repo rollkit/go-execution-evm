@@ -13,13 +13,6 @@ help: Makefile
 	@sed -n 's/^##//p' $< | column -t -s ':' |  sed -e 's/^/ /'
 .PHONY: help
 
-## build: build evm-middleware binary
-build: build/evm-middleware
-.PHONY: build
-
-build/evm-middleware: cmd/evm-middleware/main.go execution.go go.mod go.sum
-	@echo "Building build/evm-middleware"
-	@go build -o build/evm-middleware ./cmd/evm-middleware
 
 ## clean: clean testcache
 clean:
@@ -49,8 +42,6 @@ lint: vet
 	@golangci-lint run
 	@echo "--> Running markdownlint"
 	@markdownlint --config .markdownlint.yaml '**/*.md'
-	@echo "--> Running hadolint"
-	@hadolint docker/mockserv.Dockerfile
 	@echo "--> Running yamllint"
 	@yamllint --no-warnings . -c .yamllint.yml
 	@echo "--> Running actionlint"
