@@ -242,13 +242,19 @@ func TestExecutionClientLifecycle(t *testing.T) {
 	toAddress := common.HexToAddress(TEST_TO_ADDRESS)
 
 	tx := types.NewTransaction(nonce, toAddress, txValue, gasLimit, gasPrice, nil)
+	tx1 := types.NewTransaction(nonce+1, toAddress, txValue, gasLimit, gasPrice, nil)
 
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+	require.NoError(t, err)
+
+	signedTx1, err := types.SignTx(tx1, types.NewEIP155Signer(chainId), privateKey)
 	require.NoError(t, err)
 
 	rSignedTx, sSignedTx, vSignedTx := signedTx.RawSignatureValues()
 
 	err = rpcClient.SendTransaction(context.Background(), signedTx)
+	require.NoError(t, err)
+	err = rpcClient.SendTransaction(context.Background(), signedTx1)
 	require.NoError(t, err)
 
 	require.True(t, t.Run("GetTxs", func(t *testing.T) {

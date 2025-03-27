@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -190,19 +191,28 @@ func (c *EngineAPIExecutionClient) GetTxs(ctx context.Context) ([]execution_type
 	return txs, nil
 }
 
-func (c *EngineAPIExecutionClient) getBlockHash(ctx context.Context, height uint64) (common.Hash, error) {
+func (c *EngineAPIExecutionClient) getBlockHashAndTimestamp(ctx context.Context, height uint64) (common.Hash, uint64, error) {
 	var block map[string]interface{}
 	err := c.engineClient.CallContext(
 		ctx, &block, "eth_getBlockByNumber", rpc.BlockNumber(height), false) //nolint:gosec // disable G115
 	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to get block at height %d: %w", height, err)
+		return common.Hash{}, 0, fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
+
 	// Extract the block hash
 	blockHashStr, ok := block["hash"].(string)
 	if !ok {
-		return common.Hash{}, fmt.Errorf("failed to get block hash at height %d", height)
+		return common.Hash{}, 0, fmt.Errorf("failed to get block hash at height %d", height)
 	}
-	return common.HexToHash(blockHashStr), nil
+
+	// Extract the block timestamp
+	hexTimestamp := strings.TrimPrefix(block["timestamp"].(string), "0x")
+	unixTime, err := strconv.ParseUint(hexTimestamp, 16, 64)
+	if err != nil {
+		return common.Hash{}, 0, fmt.Errorf("failed to get block timestamp at height %d", height)
+	}
+
+	return common.HexToHash(blockHashStr), unixTime, nil
 }
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used
@@ -228,36 +238,48 @@ func (c *EngineAPIExecutionClient) ExecuteTxs(ctx context.Context, txs []executi
 		txsPayload[i] = buf.Bytes()
 	}
 
+	var (
+		err           error
+		prevBlockHash common.Hash
+		prevTimestamp uint64
+	)
+
 	// fetch previous block hash to update forkchoice for the next payload id
-	var err error
-	var prevBlockHash common.Hash
 	if height == c.initialHeight {
 		prevBlockHash = c.genesisHash
 	} else {
-		prevBlockHash, err = c.getBlockHash(ctx, height-1)
+		prevBlockHash, prevTimestamp, err = c.getBlockHashAndTimestamp(ctx, height-1)
 		if err != nil {
 			return execution_types.Hash{}, 0, err
 		}
+	}
+
+	// make sure that the timestamp is increasing
+	ts := uint64(timestamp.Unix())
+	if ts <= prevTimestamp {
+		ts = prevTimestamp + 1 // Subsequent blocks must have a higher timestamp.
 	}
 
 	// update forkchoice to get the next payload id
 	var forkchoiceResult engine.ForkChoiceResponse
 	err = c.engineClient.CallContext(ctx, &forkchoiceResult, "engine_forkchoiceUpdatedV3",
 		engine.ForkchoiceStateV1{
-			HeadBlockHash:      prevBlockHash,
-			SafeBlockHash:      prevBlockHash,
-			FinalizedBlockHash: prevBlockHash,
+			HeadBlockHash: prevBlockHash,
+			SafeBlockHash: prevBlockHash,
+			// FinalizedBlockHash: prevBlockHash,
 		},
 		&engine.PayloadAttributes{
-			Timestamp:             uint64(timestamp.Unix()), //nolint:gosec // disable G115
-			Random:                c.derivePrevRandao(height),
+			Timestamp:             ts,
+			Random:                prevBlockHash, //c.derivePrevRandao(height),
 			SuggestedFeeRecipient: c.feeRecipient,
 			Withdrawals:           []*types.Withdrawal{},
 			BeaconRoot:            &c.genesisHash,
+			Transactions:          txsPayload, // force to use txsPayload
+			NoTxPool:              true,
 		},
 	)
 	if err != nil {
-		return execution_types.Hash{}, 0, fmt.Errorf("forkchoice update failed: %w", err)
+		return execution_types.Hash{}, 0, fmt.Errorf("forkchoice update failed123: %w", err)
 	}
 
 	if forkchoiceResult.PayloadID == nil {
@@ -319,7 +341,7 @@ func (c *EngineAPIExecutionClient) setFinal(ctx context.Context, blockHash commo
 
 // SetFinal marks a block at the given height as final
 func (c *EngineAPIExecutionClient) SetFinal(ctx context.Context, height uint64) error {
-	blockHash, err := c.getBlockHash(ctx, height)
+	blockHash, _, err := c.getBlockHashAndTimestamp(ctx, height)
 	if err != nil {
 		return err
 	}
