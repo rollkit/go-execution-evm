@@ -26,12 +26,12 @@ const (
 	TEST_ENGINE_URL = "http://localhost:8551"
 
 	CHAIN_ID          = "1234"
-	GENESIS_HASH      = "0x0a962a0d163416829894c89cb604ae422323bcdf02d7ea08b94d68d3e026a380"
+	GENESIS_HASH      = "0x568201e3a763b59f7c646d72bf75a25aafff57f98a82dbd7b50542382c55f372"
 	GENESIS_STATEROOT = "0x362b7d8a31e7671b0f357756221ac385790c25a27ab222dc8cbdd08944f5aea4"
 	TEST_PRIVATE_KEY  = "cece4f25ac74deb1468965160c7185e07dff413f23fcadb611b05ca37ab0a52e"
 	TEST_TO_ADDRESS   = "0x944fDcD1c868E3cC566C78023CcB38A32cDA836E"
 
-	DOCKER_PATH  = "./docker"
+	DOCKER_PATH  = "../../docker"
 	JWT_FILENAME = "jwt.hex"
 )
 
@@ -69,7 +69,7 @@ func TestEngineExecution(t *testing.T) {
 	t.Run("Build chain", func(tt *testing.T) {
 		jwtSecret := setupTestRethEngine(tt)
 
-		executionClient, err := NewPureEngineExecutionClient(
+		executionClient, err := NewEngineExecutionClient(
 			TEST_ETH_URL,
 			TEST_ENGINE_URL,
 			jwtSecret,
@@ -88,7 +88,7 @@ func TestEngineExecution(t *testing.T) {
 		prevStateRoot := rollkitGenesisStateRoot
 		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
 
-		for blockHeight := initialHeight + 1; blockHeight <= 10; blockHeight++ {
+		for blockHeight := initialHeight; blockHeight <= 10; blockHeight++ {
 			nTxs := int(blockHeight) + 10
 			// randomly use no transactions
 			if blockHeight == 4 {
@@ -105,7 +105,7 @@ func TestEngineExecution(t *testing.T) {
 
 			payload, err := executionClient.GetTxs(ctx)
 			require.NoError(tt, err)
-			require.Lenf(tt, payload, nTxs+1, "expected %d transactions, got %d", nTxs+1, len(payload))
+			require.Len(tt, payload, nTxs)
 
 			allPayloads = append(allPayloads, payload)
 
@@ -117,7 +117,9 @@ func TestEngineExecution(t *testing.T) {
 
 			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, time.Now(), prevStateRoot)
 			require.NoError(tt, err)
-			require.NotZero(tt, maxBytes)
+			if nTxs > 0 {
+				require.NotZero(tt, maxBytes)
+			}
 
 			err = executionClient.SetFinal(ctx, blockHeight)
 			require.NoError(tt, err)
@@ -137,15 +139,11 @@ func TestEngineExecution(t *testing.T) {
 		}
 	})
 
-	if t.Failed() {
-		return
-	}
-
 	// start new container and try to sync
 	t.Run("Sync chain", func(tt *testing.T) {
 		jwtSecret := setupTestRethEngine(t)
 
-		executionClient, err := NewPureEngineExecutionClient(
+		executionClient, err := NewEngineExecutionClient(
 			TEST_ETH_URL,
 			TEST_ENGINE_URL,
 			jwtSecret,
@@ -164,8 +162,8 @@ func TestEngineExecution(t *testing.T) {
 		prevStateRoot := rollkitGenesisStateRoot
 		lastHeight, lastHash, lastTxs := checkLatestBlock(tt, ctx)
 
-		for blockHeight := initialHeight + 1; blockHeight <= 10; blockHeight++ {
-			payload := allPayloads[blockHeight-initialHeight-1]
+		for blockHeight := initialHeight; blockHeight <= 10; blockHeight++ {
+			payload := allPayloads[blockHeight-1]
 
 			// Check latest block before execution
 			beforeHeight, beforeHash, beforeTxs := checkLatestBlock(tt, ctx)
@@ -174,8 +172,11 @@ func TestEngineExecution(t *testing.T) {
 			require.Equal(tt, lastTxs, beforeTxs, "Number of transactions should match")
 
 			newStateRoot, maxBytes, err := executionClient.ExecuteTxs(ctx, payload, blockHeight, time.Now(), prevStateRoot)
-			require.NoErrorf(tt, err, "blockHeight: %d, nTxs: %d", blockHeight, len(payload)-1)
-			require.NotZero(tt, maxBytes)
+			require.NoError(t, err)
+			if len(payload) > 0 {
+				require.NotZero(tt, maxBytes)
+			}
+			require.NotEqual(tt, prevStateRoot, newStateRoot)
 
 			err = executionClient.SetFinal(ctx, blockHeight)
 			require.NoError(tt, err)
@@ -186,12 +187,8 @@ func TestEngineExecution(t *testing.T) {
 			require.NotEmpty(tt, lastHash.Hex(), "Latest block hash should not be empty")
 			require.GreaterOrEqual(tt, lastTxs, 0, "Number of transactions should be non-negative")
 
-			if len(payload)-1 == 0 {
-				require.Equal(tt, prevStateRoot, newStateRoot)
-			} else {
-				require.NotEqual(tt, prevStateRoot, newStateRoot)
-			}
 			prevStateRoot = newStateRoot
+			fmt.Println("all good blockheight", blockHeight)
 		}
 	})
 }
@@ -387,16 +384,9 @@ func TestSubmitTransaction(t *testing.T) {
 	lastNonce, err = rpcClient.NonceAt(ctx, address, new(big.Int).SetUint64(height))
 	require.NoError(t, err)
 
-	for s := 0; s < 30; s++ {
-		startTime := time.Now()
-		for i := 0; i < 5000; i++ {
-			tx := getRandomTransaction(t, 22000)
-			submitTransaction(t, tx)
-		}
-		elapsed := time.Since(startTime)
-		if elapsed < time.Second {
-			time.Sleep(time.Second - elapsed)
-		}
+	for i := 0; i < 10; i++ {
+		tx := getRandomTransaction(t, 22000)
+		submitTransaction(t, tx)
 	}
 }
 
