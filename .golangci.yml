@@ -6,6 +6,11 @@ linters:
     - gosec
     - misspell
     - revive
+    - errorlint
+    - gosec
+    - unconvert
+    - unused
+    - staticcheck
   settings:
     revive:
       rules:

@@ -37,7 +37,7 @@ deps:
 .PHONY: deps
 
 ## lint: Run linters golangci-lint and markdownlint.
-lint: vet
+lint:
 	@echo "--> Running golangci-lint"
 	@golangci-lint run
 	@echo "--> Running markdownlint"
