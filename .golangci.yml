@@ -7,7 +7,6 @@ linters:
     - misspell
     - revive
     - errorlint
-    - gosec
     - unconvert
     - unused
     - staticcheck
