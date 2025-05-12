@@ -47,7 +47,13 @@ services:
           --http --http.addr 0.0.0.0 --http.port 8545 \
           --http.api "eth,net,web3,txpool" \
           --disable-discovery \
-          -vvvv
+          --txpool.pending-max-count 200000 \
+          --txpool.pending-max-size 200 \
+          --txpool.queued-max-count 200000 \
+          --txpool.queued-max-size 200 \
+          --txpool.max-account-slots 2048 \
+          --txpool.max-new-txns 2048 \
+          --txpool.additional-validation-tasks 16
 
 volumes:
   logs:
