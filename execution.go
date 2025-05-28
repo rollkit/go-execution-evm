@@ -161,6 +161,15 @@ func (c *EngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to unmarshal transaction: %w", err)
 		}
+		txHash := ethTxs[i].Hash()
+		_, isPending, err := c.ethClient.TransactionByHash(context.Background(), txHash)
+		if err == nil && isPending {
+			continue // skip SendTransaction
+		}
+		err = c.ethClient.SendTransaction(context.Background(), ethTxs[i])
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to send transaction: %w", err)
+		}
 	}
 
 	// encode

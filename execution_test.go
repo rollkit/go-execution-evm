@@ -105,7 +105,7 @@ func TestEngineExecution(t *testing.T) {
 
 			payload, err := executionClient.GetTxs(ctx)
 			require.NoError(tt, err)
-			require.Lenf(tt, payload, nTxs+1, "expected %d transactions, got %d", nTxs+1, len(payload))
+			require.Lenf(tt, payload, nTxs, "expected %d transactions, got %d", nTxs, len(payload))
 
 			allPayloads = append(allPayloads, payload)
 
@@ -180,7 +180,11 @@ func TestEngineExecution(t *testing.T) {
 			if len(payload) > 0 {
 				require.NotZero(tt, maxBytes)
 			}
-			require.NotEqual(tt, prevStateRoot, newStateRoot)
+			if len(payload) == 0 {
+				require.Equal(tt, prevStateRoot, newStateRoot)
+			} else {
+				require.NotEqual(tt, prevStateRoot, newStateRoot)
+			}
 
 			err = executionClient.SetFinal(ctx, blockHeight)
 			require.NoError(tt, err)
