@@ -139,7 +139,7 @@ func (c *PureEngineClient) InitChain(ctx context.Context, genesisTime time.Time,
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get txs: %w", err)
 	}
-	return c.ExecuteTxs(ctx, payload, 1, genesisTime, stateRoot[:])
+	return c.ExecuteTxs(ctx, payload, 1, genesisTime, stateRoot[:], nil)
 }
 
 // GetTxs retrieves transactions from the current execution payload
@@ -209,7 +209,7 @@ func (c *PureEngineClient) GetTxs(ctx context.Context) ([][]byte, error) {
 }
 
 // ExecuteTxs executes the given transactions at the specified block height and timestamp
-func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) (updatedStateRoot []byte, maxBytes uint64, err error) {
+func (c *PureEngineClient) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte, metadata map[string]interface{}) (updatedStateRoot []byte, maxBytes uint64, err error) {
 	// special handling of block 1 (rollkit expects this to be genesis block)
 	if blockHeight == 1 && len(txs) == 0 {
 		_, stateRoot, gasLimit, err := c.getBlockInfo(ctx, blockHeight)
